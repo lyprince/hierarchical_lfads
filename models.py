@@ -2997,6 +2997,7 @@ class LadderLFADS(LFADS):
                 test_recon_loss += self.recon_loss.data
                 test_kl_loss += self.kl_loss.data
                 
+                
         test_loss /= (i+1)
         test_recon_loss /= (i+1)
         test_kl_loss /= (i+1)
