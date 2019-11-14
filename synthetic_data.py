@@ -65,7 +65,7 @@ def generate_lorenz_data(N_trials, N_inits, N_cells, N_steps, N_stepsinbin = 1,
                          dt_lorenz=None, dt_spike=None, dt_cal=None,
                          base_firing_rate = 5.0,
                          tau_c = 0.4, inc_c = 1.0, sigma=0.2,
-                         trainp= 0.8, seed=100, save=True):
+                         trainp= 0.8, seed=100, save=True, save_dir='./'):
     N_lorenz = 3
     assert N_steps%N_stepsinbin == 0, 'Can\'t bin time steps'
     N_steps_bin = int(N_steps/N_stepsinbin)
@@ -124,7 +124,7 @@ def generate_lorenz_data(N_trials, N_inits, N_cells, N_steps, N_stepsinbin = 1,
     fluor[:, :, 0, :]   = ct + np.random.randn(N_trials, N_inits, N_cells)*sigma
     
     for step in range(1, N_steps_bin):
-        ct = eulerStep(ct, calcium_grad(ct, tau_c), dt_cal)
+        ct = eulerStep(ct, calcium_grad(ct, tau_c), dt_spike)
         ct = ct + inc_c*spikes[:, :, step, :]
         calcium[:, :, step, :] = ct
         fluor[:, :, step, :]   = ct + np.random.randn(N_trials, N_inits, N_cells)*sigma
@@ -149,16 +149,16 @@ def generate_lorenz_data(N_trials, N_inits, N_cells, N_steps, N_stepsinbin = 1,
     data_dict['conversion_factor'] = 1./(np.max(rates) * dt_cal)
     
     if save:
-        utils.write_data('./synth_data/lorenz_%03d'%seed, data_dict)
+        utils.write_data('%s/synth_data/lorenz_%03d'%(save_dir, seed), data_dict)
         
     return data_dict
 
 
-def generate_chaotic_rnn_data(T= 1, dt_rnn= 0.01, dt_cal= 0.1,
-                              Ninits= 400, Ntrial= 10, Ncells= 50, trainp= 0.8,
-                              tau=0.025, gamma=1.5, maxRate=5, B=20,
+def generate_chaotic_rnn_data(Ninits= 400, Ntrial= 10, Ncells= 50, Nsteps=200,
+                              trainp= 0.8, dt_rnn= 0.1, dt_spike= 0.1,
+                              tau=0.25, gamma=1.5, maxRate=5, B=20,
                               tau_c = 0.4, inc_c=1.0, sigma=0.2,
-                              seed=5, save=False):
+                              seed=5, save=False, save_dir='./'):
     
     '''
     Generate synthetic calcium fluorescence data from chaotic recurrent neural network system
@@ -166,7 +166,7 @@ def generate_chaotic_rnn_data(T= 1, dt_rnn= 0.01, dt_cal= 0.1,
     Arguments:
         - T (int or float): total time in seconds to run 
         - dt_rnn (float): time step of chaotic RNN
-        - dt_cal (float): time step of calcium trace
+        - dt_spike (float): time step of calcium trace
         - Ninits (int): Number of network initialisations
         - Ntrial (int): Number of instances with same network initialisations
         - Ncells (int): Number of cells in network
@@ -197,14 +197,14 @@ def generate_chaotic_rnn_data(T= 1, dt_rnn= 0.01, dt_cal= 0.1,
         y0 = np.random.randn(Ncells)
 
         for trial in range(Ntrial):
-            perturb_step = np.random.randint(0.25*Nsteps,0.75*Nsteps)
+            perturb_step = np.random.randint(0.25*Nsteps, 0.75*Nsteps)
             perturb_steps.append(perturb_step)
             perturb_amp = np.random.randn(Ncells)*B
             b = 0
 
             yt = y0
             rt = rateScale(np.tanh(yt), maxRate=maxRate)
-            st = spikify_rates(rt, dt=dt_cal)
+            st = spikify_rates(rt, dt=dt_spike)
             ct = inc_c*st
 
             rates[init, trial, 0, :]   = rt
@@ -214,7 +214,7 @@ def generate_chaotic_rnn_data(T= 1, dt_rnn= 0.01, dt_cal= 0.1,
 
             for step in range(1, Nsteps):
                 yt = eulerStep(yt, RNNgrad(yt+b, W, tau), dt_rnn)
-                ct = eulerStep(ct, calciumgrad(ct, tau_c),  dt_cal)
+                ct = eulerStep(ct, calciumgrad(ct, tau_c),  dt_spike)
 
                 if step == perturb_step:
                     b = perturb_amp*dt_rnn/tau
@@ -222,7 +222,7 @@ def generate_chaotic_rnn_data(T= 1, dt_rnn= 0.01, dt_cal= 0.1,
                     b = 0
 
                 rt = rateScale(np.tanh(yt), maxRate=maxRate)
-                st = spikify_rates(rt, dt=dt_cal)
+                st = spikify_rates(rt, dt=dt_spike)
                 ct = ct + inc_c*st
 
                 rates[init, trial, step, :]   = rt
@@ -237,18 +237,18 @@ def generate_chaotic_rnn_data(T= 1, dt_rnn= 0.01, dt_cal= 0.1,
         data_dict['valid_%s'%name] = np.reshape(data[N_train:], ((N_trials - N_train) * N_inits, N_steps_bin, data.shape[-1]))
         
     if importlib.find_loader('oasis'):
-        data_dict['train_oasis'] = deconvolve_calcium(data_dict['train_fluor'], g=np.exp(-dt_cal/tau_c))
-        data_dict['valid_oasis'] = deconvolve_calcium(data_dict['valid_fluor'], g=np.exp(-dt_cal/tau_c))
+        data_dict['train_oasis'] = deconvolve_calcium(data_dict['train_fluor'], g=np.exp(-dt_spike/tau_c))
+        data_dict['valid_oasis'] = deconvolve_calcium(data_dict['valid_fluor'], g=np.exp(-dt_spike/tau_c))
     
     data_dict['train_data']  = data_dict['train_spikes']
     data_dict['valid_data']  = data_dict['valid_spikes']
     data_dict['train_truth'] = data_dict['train_rates']
     data_dict['valid_truth'] = data_dict['valid_rates']
-    data_dict['dt']          = dt_cal
-    data_dict['perturb_times'] = np.array(perturb_steps)*dt_cal
+    data_dict['dt']          = dt_spike
+    data_dict['perturb_times'] = np.array(perturb_steps)*dt_spike
     
     
     if save:
-        utils.write_data('./synth_data/chaotic_rnn_%03d'%seed, data_dict)
+        utils.write_data('%s/synth_data/chaotic_rnn_%03d'%(save_dir, seed), data_dict)
         
     return data_dict
