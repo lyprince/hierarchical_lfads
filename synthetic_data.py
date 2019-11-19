@@ -11,7 +11,6 @@ def lorenz_grad(y, w):
     dy1 = w1 * (y2 - y1)
     dy2 = y1 * (w2 - y3) - y2
     dy3 = y1 *  y2 - w3  * y3
-    
     return np.array([dy1, dy2, dy3]).T
 
 def spikify_rates(r, dt):
@@ -40,7 +39,7 @@ def rateTransform(y, W, b):
     B, T, N = y.shape
     r = np.zeros((B, T, W.shape[1]))
     for t in range(T):
-        r[:, t] = np.exp((y[:, t].dot(W) + b).clip(-20, 20))        
+        r[:, t] = np.exp((y[:, t].dot(W) + b).clip(-20, 20))
     return r
 
 def split_data(data, split_ix):
@@ -66,39 +65,42 @@ def generate_lorenz_data(N_trials, N_inits, N_cells, N_steps, N_stepsinbin = 1,
                          base_firing_rate = 5.0,
                          tau_c = 0.4, inc_c = 1.0, sigma=0.2,
                          trainp= 0.8, seed=100, save=True, save_dir='./'):
+
+    print('Generating Lorenz data', flush=True)
     N_lorenz = 3
     assert N_steps%N_stepsinbin == 0, 'Can\'t bin time steps'
     N_steps_bin = int(N_steps/N_stepsinbin)
     if dt_lorenz is None:
         dt_lorenz = np.clip(2.0/N_steps, 0.005, 0.02)
-    
+
     if dt_spike is None:
         dt_spike = dt_lorenz
-        
+
     if dt_cal is None:
         dt_cal = dt_spike * N_stepsinbin
-        
+
     N_train = int(N_trials * trainp)
     N_steps_burn = max(N_steps, 300)
 
     y = np.zeros((N_inits, N_steps + N_steps_burn, N_lorenz))
-    
+
     w_lorenz = ([10.0, 28.0, 8.0/3.0]);
     y[:, 0] = np.random.randn(N_inits, N_lorenz)
     for step in range(1, N_steps + N_steps_burn):
         dy = lorenz_grad(y[:, step - 1], w_lorenz)
         y[:, step] = eulerStep(y[:, step-1], dy, dt_lorenz)
-        
+
+    print('Converting to rates and spikes', flush=True)
+
     y = y[:, N_steps_burn:]
     y = normalize(y)
-    
-    
+
     W = (np.random.rand(N_lorenz, N_cells) + 1) * np.sign(np.random.randn(N_lorenz, N_cells))
     b = np.log(base_firing_rate)
-    
+
     rates  = np.exp(y.dot(W) + b)
     spikes = np.array([np.random.poisson(rates * dt_spike) for trial in range(N_trials)])
-    
+
     if N_stepsinbin > 1:
         from scipy.stats import binned_statistic
         binned_latent = np.zeros((N_trials, N_inits, N_steps_bin, N_lorenz))
@@ -115,42 +117,45 @@ def generate_lorenz_data(N_trials, N_inits, N_cells, N_steps, N_stepsinbin = 1,
     else:
         latent = np.array([y for trial in range(N_trials)])
         rates  = np.array([rates for trial in range(N_trials)])
-    
+
     calcium = np.zeros_like(spikes, dtype=float)
     fluor   = np.zeros_like(spikes, dtype=float)
-    
-    ct = spikes[:, :, 0, :]*inc_c 
+
+    ct = spikes[:, :, 0, :]*inc_c
     calcium[:, :, 0, :] = ct
     fluor[:, :, 0, :]   = ct + np.random.randn(N_trials, N_inits, N_cells)*sigma
-    
+
+    print('Converting to fluorescence', flush=True)
     for step in range(1, N_steps_bin):
         ct = eulerStep(ct, calcium_grad(ct, tau_c), dt_spike)
         ct = ct + inc_c*spikes[:, :, step, :]
         calcium[:, :, step, :] = ct
         fluor[:, :, step, :]   = ct + np.random.randn(N_trials, N_inits, N_cells)*sigma
-    
+
+    print('Train and test split')
     data_dict = {}
     for data, name in zip([latent, rates, spikes, calcium, fluor], ['latent', 'rates', 'spikes', 'calcium', 'fluor']):
         data_dict['train_%s'%name] = np.reshape(data[:N_train], (N_train * N_inits, N_steps_bin, data.shape[-1]))
         data_dict['valid_%s'%name] = np.reshape(data[N_train:], ((N_trials - N_train) * N_inits, N_steps_bin, data.shape[-1]))
-        
+
     if importlib.find_loader('oasis'):
         data_dict['train_oasis'] = deconvolve_calcium(data_dict['train_fluor'], g=np.exp(-dt_cal/tau_c))
         data_dict['valid_oasis'] = deconvolve_calcium(data_dict['valid_fluor'], g=np.exp(-dt_cal/tau_c))
-    
+
     data_dict['train_data']  = data_dict['train_spikes']
     data_dict['valid_data']  = data_dict['valid_spikes']
     data_dict['train_truth'] = data_dict['train_rates']
     data_dict['valid_truth'] = data_dict['valid_rates']
     data_dict['dt']          = dt_cal
-    
+
     data_dict['loading_weights'] = W
-    
+
     data_dict['conversion_factor'] = 1./(np.max(rates) * dt_cal)
-    
+
+    print('Saving to %s/synth_data/lorenz_%03d'%(save_dir, seed), flush=True)
     if save:
         utils.write_data('%s/synth_data/lorenz_%03d'%(save_dir, seed), data_dict)
-        
+
     return data_dict
 
 

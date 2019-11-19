@@ -8,7 +8,7 @@ betas: !!python/tuple
 - 0.99
 c_encoder_dim: 128
 clip_val: 5.0
-controller_dim: 128
+c_controller_dim: 128
 dataset_name: chaotic_rnn
 datatype: calcium
 deep_freeze : true

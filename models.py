@@ -1765,7 +1765,7 @@ class LFADS(nn.Module):
         valid_loss, valid_recon_loss, valid_kl_loss = self._test_one_epoch(fit_dict=fit_dict)
 
         # Print Epoch Loss
-        print('Epoch: %4d, Step: %5d, training loss: %.3f, validation loss: %.3f' %(self.epochs+1, self.current_step, train_loss, valid_loss))
+        print('Epoch: %4d, Step: %5d, training loss: %.3f, validation loss: %.3f'%(self.epochs+1, self.current_step, train_loss, valid_loss), flush=True)
 
         # Apply learning rate decay function
         if self.scheduler_on:

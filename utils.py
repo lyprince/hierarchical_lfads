@@ -88,7 +88,7 @@ def update_param_dict(prev_params, new_params):
     return params
 
 def load_parameters(path):
-    return yaml.load(open(path))
+    return yaml.load(open(path), Loader=yaml.FullLoader)
 
 def save_parameters(params, output='.', path=None):
     save_loc = '%s/models/%s_%s/%s/'%(output, params['dataset_name'], params['datatype'], params['run_name'])
