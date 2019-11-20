@@ -2,6 +2,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import utils
 import importlib
+import skimage.draw as draw
+import torch
+import torchvision
 if importlib.find_loader('oasis'):
     import oasis
 
@@ -152,6 +155,10 @@ def generate_lorenz_data(N_trials, N_inits, N_cells, N_steps, N_stepsinbin = 1,
 
     data_dict['conversion_factor'] = 1./(np.max(rates) * dt_cal)
 
+    cells, cell_loc = generate_cells(N_cells, frame_width=128, frame_height=128, cell_radius=4)
+    data_dict['cells'] = cells
+    data_dict['cell_loc'] = cell_loc
+    
     print('Saving to %s/synth_data/lorenz_%03d'%(save_dir, seed), flush=True)
     if save:
         utils.write_data('%s/synth_data/lorenz_%03d'%(save_dir, seed), data_dict)
@@ -252,8 +259,42 @@ def generate_chaotic_rnn_data(Ninits= 400, Ntrial= 10, Ncells= 50, Nsteps=200,
     data_dict['dt']          = dt_spike
     data_dict['perturb_times'] = np.array(perturb_steps)*dt_spike
     
+    cells, cell_loc = generate_cells(Ncells, frame_width=128, frame_height=128, cell_radius=4)
+    data_dict['cells'] = cells
+    data_dict['cell_loc'] = cell_loc
     
     if save:
         utils.write_data('%s/synth_data/chaotic_rnn_%03d'%(save_dir, seed), data_dict)
-        
     return data_dict
+
+def generate_cells(num_cells, frame_width, frame_height, cell_radius):
+    cell_loc = np.random.uniform(low=np.array([[0.0], [0.0]])* np.ones((1, num_cells)),
+                                 high=np.array([[frame_width], [frame_height]]) * np.ones((1, num_cells)))
+    A = np.zeros((num_cells, frame_width + 2*cell_radius, frame_height + 2*cell_radius))
+    for ix in range(num_cells):
+        r, c = cell_loc[:, ix]
+        rr, cc = draw.circle(r, c, radius=cell_radius)
+        A[ix, rr, cc] += 1
+    return A[:, cell_radius:-cell_radius, cell_radius:-cell_radius], cell_loc
+        
+
+class SyntheticCalciumVideoDataset(torch.utils.data.Dataset):
+   
+    def __init__(self, traces, cells):
+        super(SyntheticCalciumVideoDataset, self).__init__()
+        
+        if not torch.is_tensor(cells):
+            cells = torch.Tensor(cells)
+        
+        if not torch.is_tensor(traces):
+            traces = torch.Tensor(traces)
+            
+        self.cells = cells
+        self.traces = traces
+        
+    def __getitem__(self, ix):
+        return (self.traces[ix].unsqueeze(-1).unsqueeze(-1) * self.cells).sum(dim=1).unsqueeze(2)
+    
+    def __len__(self):
+        return traces.__len__()
+    
