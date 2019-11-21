@@ -243,11 +243,10 @@ def generate_chaotic_rnn_data(Ninits= 400, Ntrial= 10, Ncells= 50, Nsteps=200,
                 fluor[init, trial, step, :]   = ct + np.random.randn(Ncells)*sigma
     
     # Construct data dictionary
-    data_dict = {}
-    for data, name in zip([rates, spikes, calcium, fluor], ['rates', 'spikes', 'calcium', 'fluor']):
-        print(data[:, :Ntrain].shape)
-        data_dict['train_%s'%name] = np.reshape(data[:, :Ntrain], (Ntrain * Ninits, Nsteps, data.shape[-1]))
-        data_dict['valid_%s'%name] = np.reshape(data[:, Ntrain:], ((Ntrial - Ntrain) * Ninits, Nsteps, data.shape[-1]))
+    
+    for data, name in zip([rates, spikes, calcium, fluor], ['rates', 'spikes', 'calcium', 'fluor'])print(data.shape)
+        data_dict['train_%s'%name] = np.reshape(data[:Ntrain], (Ntrain * Ninits, Nsteps, data.shape[-1]))
+        data_dict['valid_%s'%name] = np.reshape(data[Ntrain:], ((Ntrial - Ntrain) * Ninits, Nsteps, data.shape[-1]))
         
     if importlib.find_loader('oasis'):
         data_dict['train_oasis'] = deconvolve_calcium(data_dict['train_fluor'], g=np.exp(-dt_spike/tau_c))
@@ -265,7 +264,7 @@ def generate_chaotic_rnn_data(Ninits= 400, Ntrial= 10, Ncells= 50, Nsteps=200,
     data_dict['cell_loc'] = cell_loc
     
     if save:
-        utils.write_data('%s/synth_data/chaotic-rnn_%03d'%(save_dir, seed), data_dict)
+        utils.write_data('%s/synth_data/chaotic_rnn_%03d'%(save_dir, seed), data_dict)
     return data_dict
 
 def generate_cells(num_cells, frame_width, frame_height, cell_radius):

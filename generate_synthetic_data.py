@@ -25,30 +25,30 @@ def main():
             args.__setattr__(key, val)
             print('%s : %s'%(key, str(args.__getattribute__(key))), flush=True)
     if args.system == 'lorenz':
-        data_dict = generate_lorenz_data(N_cells=args.cells,
-                                         N_inits=args.inits,
-                                         N_trials=args.trials,
-                                         N_steps=args.steps,
-                                         N_stepsinbin=args.steps_in_bin,
-                                         dt_spike=args.dt_spike,
-                                         dt_lorenz=args.dt_sys,
-                                         base_firing_rate= args.rate_scale,
-                                         save_dir=args.output,
-                                         seed=args.seed,
-                                         save=True)
-    elif args.system == 'chaotic_rnn':
-        data_dict = generate_chaotic_rnn_data(N_cells=args.cells,
-                                              N_inits=args.inits,
-                                              N_trials=args.trials,
-                                              N_steps=args.steps,
-                                              dt_spike=args.dt_spike,
-                                              dt_rnn=dt_sys,
-                                              maxRate= args.rate_scale,
-                                              save_dir=args.output,
-                                              seed=args.seed,
-                                              save=True)
+        data_dict = generate_lorenz_data(N_cells          = args.cells,
+                                         N_inits          = args.inits,
+                                         N_trials         = args.trials,
+                                         N_steps          = args.steps,
+                                         N_stepsinbin     = args.steps_in_bin,
+                                         dt_spike         = args.dt_spike,
+                                         dt_lorenz        = args.dt_sys,
+                                         base_firing_rate = args.rate_scale,
+                                         save_dir         = args.output,
+                                         seed             = args.seed,
+                                         save             = True)
+    elif args.system == 'chaotic-rnn':
+        data_dict = generate_chaotic_rnn_data(Ncells   = args.cells,
+                                              Ninits   = args.inits,
+                                              Ntrial   = args.trials,
+                                              Nsteps   = args.steps,
+                                              dt_spike = args.dt_spike,
+                                              dt_rnn   = args.dt_sys,
+                                              maxRate  = args.rate_scale,
+                                              save_dir = args.output,
+                                              seed     = args.seed,
+                                              save     = True)
     else:
-        raise ValueError('Unrecognised simulator system argument. Must choose lorenz or chaotic_rnn')
+        raise ValueError('Unrecognised simulator system argument. Must choose lorenz or chaotic-rnn')
 
 if __name__ == '__main__':
     main()
