@@ -22,6 +22,7 @@ python generate_synthetic_data.py -d $SYSTEM -s $SEED -o $SLURM_TMPDIR -p $HOME/
 python run_lfads.py -d $SLURM_TMPDIR/synth_data/${SYSTEM}_${SEED} -p parameters/parameters_${SYSTEM}_${MODEL}.yaml -o $SLURM_TMPDIR
 
 cp -r $SLURM_TMPDIR/models $HOME/hierarchical_lfads
+cp -r $SLURM_TMPDIR/synth_data $HOME/hierarchical_lfads
 
 end=`date +%s`
 runtime = $((end-start))

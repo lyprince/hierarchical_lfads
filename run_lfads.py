@@ -16,12 +16,14 @@ parser.add_argument('--batch_size', default=None, type=int)
 def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'; print('Using device: %s'%device, flush=True)
     args = parser.parse_args()
+    _, seed = args.datapath('/')[-1].split('.')[0].split('_')
     _, system_name, model_name = args.parameter_path.split('/')[-1].split('.')[0].split('_')
 
     # Load hyperparameters
     hyperparams = load_parameters(args.parameter_path)
 
-    # Alter run name to describe parameter settings and date of model run
+    # Alter run name to describe seed, parameter settings and date of model run
+    hyperparams['run_name'] += '_seed%s'%seed
     hyperparams['run_name'] += '_f%i_g1%i_eg1%i_u%i'%(hyperparams['factors_dim'], hyperparams['g_dim'], hyperparams['g0_encoder_dim'], hyperparams['u_dim'])
 
     if hyperparams['u_dim'] > 0:
@@ -34,6 +36,7 @@ def main():
         hyperparams['run_name'] += '_k%i'%hyperparams['kernel_dim']
 
     hyperparams['run_name'] += '_%s'%time.strftime('%y%m%d')
+    save_parameters(hyperparams, output=args.output)
 
     # Load data
     data_dict = read_data(args.data_path)

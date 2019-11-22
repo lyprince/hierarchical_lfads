@@ -158,6 +158,7 @@ def generate_lorenz_data(N_trials, N_inits, N_cells, N_steps, N_stepsinbin = 1,
     cells, cell_loc = generate_cells(N_cells, frame_width=128, frame_height=128, cell_radius=4)
     data_dict['cells'] = cells
     data_dict['cell_loc'] = cell_loc
+    data_dict['seed'] = seed
     
     print('Saving to %s/synth_data/lorenz_%03d'%(save_dir, seed), flush=True)
     if save:
@@ -259,6 +260,7 @@ def generate_chaotic_rnn_data(Ninits= 400, Ntrial= 10, Ncells= 50, Nsteps=200,
     data_dict['valid_truth'] = data_dict['valid_rates']
     data_dict['dt']          = dt_spike
     data_dict['perturb_times'] = np.array(perturb_steps)*dt_spike
+    data_dict['seed']          = seed
     
     cells, cell_loc = generate_cells(Ncells, frame_width=128, frame_height=128, cell_radius=4)
     data_dict['cells'] = cells
