@@ -10,13 +10,14 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-o', '--output', type=str)
 parser.add_argument('-d', '--data_path', type=str)
 parser.add_argument('-p', '--parameter_path', type=str)
+# parser.add_argument('-c', '--checkpoint', default=None, type=str)
 parser.add_argument('--max_epochs', default=2000, type=int)
 parser.add_argument('--batch_size', default=None, type=int)
 
 def main():
     device = 'cuda' if torch.cuda.is_available() else 'cpu'; print('Using device: %s'%device, flush=True)
     args = parser.parse_args()
-    _, seed = args.datapath('/')[-1].split('.')[0].split('_')
+    _, seed = args.data_path.split('/')[-1].split('_')
     _, system_name, model_name = args.parameter_path.split('/')[-1].split('.')[0].split('_')
 
     # Load hyperparameters
