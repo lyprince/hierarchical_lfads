@@ -7,12 +7,14 @@ import torchvision
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as opt
+import torch.jit as jit
 np = torch._np
 from torch.autograd import Variable
 import matplotlib.pyplot as plt
 from utils import batchify_random_sample, update_param_dict
 
 from math import log, exp, pi
+from typing import Tuple
 
 import pdb
 
@@ -38,7 +40,7 @@ def r_squared(x, y):
 
 def KLCostGaussian(post_mu, post_lv, prior_mu, prior_lv):
     '''
-    KLCostGaussian(post_mu, post_lv, prior_mu, prior_lv)
+    kl_cost_gaussian(post_mu, post_lv, prior_mu, prior_lv)
 
     KL-Divergence between a prior and posterior diagonal Gaussian distribution.
 
@@ -52,9 +54,9 @@ def KLCostGaussian(post_mu, post_lv, prior_mu, prior_lv):
          + ((post_mu - prior_mu)/torch.exp(0.5 * prior_lv)).pow(2) - 1.0).sum()
     return klc
 
-def logLikelihoodGaussian(x, mu, logvar):
+def log_likelihood_gaussian(x, mu, logvar):
     '''
-    logLikelihoodGaussian(x, mu, logvar):
+    log_likelihood_gaussian(x, mu, logvar):
     
     Log-likeihood of a real-valued observation given a Gaussian distribution with mean 'mu' 
     and standard deviation 'exp(0.5*logvar)'
@@ -66,7 +68,14 @@ def logLikelihoodGaussian(x, mu, logvar):
     '''
     return -0.5*(log(2*pi) + logvar + ((x - mu).pow(2)/torch.exp(logvar))).sum()
 
-def logLikelihoodPoisson(k, lam):
+class logLikelihoodGaussian(nn.Module):
+    def __init__(self):
+        super(logLikelihoodGaussian, self).__init__()
+        
+    def forward(self, x, mu, logvar):
+        return log_likelihood_gaussian(x, mu, logvar)
+
+def log_likelihood_poisson(k, lam):
     '''
     logLikelihoodPoisson(k, lam)
 
@@ -77,6 +86,13 @@ def logLikelihoodPoisson(k, lam):
         - lam (torch.Tensor): Tensor of size batch-size x time-step x input dimensions
     '''
     return (k * torch.log(lam) - lam - torch.lgamma(k + 1)).sum()
+
+class logLikelihoodPoisson(nn.Module):
+    def __init__(self):
+        super(logLikelihoodPoisson, self).__init__()
+        
+    def forward(self, k, lam):
+        return log_likelihood_poisson(k, lam)
 
 def logLikelihoodEdgeworth(x, moments, ew_weight=1.0, clip_moments=False):
     '''
@@ -275,6 +291,42 @@ class LFADS_GenGRUCell(nn.Module):
     def hidden_weight_l2_norm(self):
         return self.fc_h_ru.weight.norm(2)/self.fc_h_ru.weight.numel() + self.fc_rh_c.weight.norm(2)/self.fc_rh_c.weight.numel()
     
+class LFADS_Generator(jit.ScriptModule):
+    def __init__(self, generator_size, factor_size, encoder_size, controller_size, perturbation_size, dropout=0.0):
+        super(LFADS_Generator, self).__init__()
+        
+        self.encoder_size      = encoder_size
+        self.perturbation_size = perturbation_size
+        self.factor_size       = factor_size
+        self.generator_size    = generator_size
+        self.controller_size   = controller_size
+        
+        if self.perturbation_size>0:
+            self.controller   = LFADS_GenGRUCell(input_size= self.econ_size * 2 + self.factor_size, hidden_size= self.controller_size)
+            self.con_to_umean   = nn.Linear(in_features=self.controller_size, out_features=self.perturbation_size)
+            self.con_to_ulogvar = nn.Linear(in_features=self.controller_size, out_features=self.perturbation_size)
+            
+        self.dropout = nn.Dropout(dropout)
+        self.generator = LFADS_GenGRUCell(input_size=self.perturbation_size, hidden_size=self.generator_size)
+        self.gen_to_fac = nn.Linear(in_features=self.generator_size, out_features=self.factor_size)
+    
+    @jit.script_method
+    def forward(self, input, state):
+        gen, fac, con = state
+        enc, eps = input
+        if self.perturbation_size > 0:
+            con     = self.controller(self.dropout(torch.cat((enc, fac)), dim=1), con)
+            umean   = self.con_to_umean(con)
+            ulogvar = self.con_to_ulogvar(con)
+            u       = umean + eps*torch.exp(0.5*ulogvar)
+        
+        else:
+            con = None
+            u = None
+            
+        gen     = self.generator(u, gen)
+        fac     = self.gen_to_fac(self.dropout(gen))
+        return gen, fac, con
 
 #--------
 # 1-D CAUSAL CHANNEL-SPECIFIC CONVOLUTION
@@ -336,7 +388,7 @@ class LFADS(nn.Module):
     def __init__(self, inputs_dim, T, dt,
                  model_hyperparams=None,
                  device = 'cpu', save_variables=False,
-                 seed=None):
+                 seed=None, use_jit=False):
         '''
         LFADS_Net (Latent Factor Analysis via Dynamical Systems) neural network class.
         
@@ -427,6 +479,7 @@ class LFADS(nn.Module):
         self.device            = device
         self.save_variables    = save_variables
         self.seed              = seed
+        self.use_jit           = use_jit
         
         self.model_hyperparams = model_hyperparams
         
@@ -641,7 +694,15 @@ class LFADS(nn.Module):
         if self.u_dim > 0:
             
             # Controller c
-            self.gru_controller_c    = LFADS_GenGRUCell(input_size= self.c_encoder_dim * 2 + self.factors_dim, hidden_size= self.c_controller_dim)
+            if self.use_jit:
+                gru_controller_c = LFADS_GenGRUCell(input_size= self.c_encoder_dim * 2 + self.factors_dim, hidden_size= self.c_controller_dim)
+                example_inputs   = ((torch.randn(50, self.c_encoder_dim * 2 + self.factors_dim), 
+                                     torch.randn(50, self.c_controller_dim)))
+                
+                self.gru_controller_c    = jit.trace(gru_controller_c, example_inputs=example_inputs)
+                
+            else:
+                self.gru_controller_c    = LFADS_GenGRUCell(input_size= self.c_encoder_dim * 2 + self.factors_dim, hidden_size= self.c_controller_dim)
             
             # Controller forward encoder initial hidden state
             self.efcon_c_init = nn.Parameter(torch.zeros(self.c_encoder_dim), requires_grad=requires_grad)
@@ -680,7 +741,13 @@ class LFADS(nn.Module):
         
         
         # Generator RNN
-        self.gru_generator    = LFADS_GenGRUCell(input_size= self.u_dim, hidden_size= self.g_dim)
+        if self.use_jit:
+            gru_generator  = LFADS_GenGRUCell(input_size= self.u_dim, hidden_size= self.g_dim)
+            example_inputs = ((torch.randn(50, self.u_dim), torch.randn(50, self.g_dim)))
+            
+            self.gru_generator    = jit.trace(gru_generator, example_inputs=example_inputs)
+        else:
+            self.gru_generator    = LFADS_GenGRUCell(input_size= self.u_dim, hidden_size= self.g_dim)
         
         # -----------
         # Fully connected layers
@@ -689,6 +756,12 @@ class LFADS(nn.Module):
         # factors from generator output
         self.fc_factors = nn.Linear(in_features= self.g_dim, out_features= self.factors_dim, bias=False)
         
+#         self.jit_generator = LFADS_Generator(encoder_size=self.c_encoder_dim,
+#                                              generator_size=self.g_dim,
+#                                              factor_size=self.factors_dim,
+#                                              controller_size=self.c_controller_dim,
+#                                              perturbation_size=self.u_dim)
+    
         # poisson process rates from factors
         self.fc_logrates = nn.Linear(in_features= self.factors_dim, out_features= self.inputs_dim)
         
@@ -817,8 +890,10 @@ class LFADS(nn.Module):
         # --------------------------
         # LOG-LIKELIHOOD FUNCTION
         # --------------------------
-        
-        self.logLikelihood = logLikelihoodPoisson
+        if self.use_jit:
+            self.logLikelihood = jit.trace(logLikelihoodPoisson(), example_inputs=((torch.randn(10, 10).exp(), torch.randn(10, 10).exp())))
+        else:
+            self.logLikelihood = logLikelihoodPoisson()
 
         # --------------------------
         # OPTIMIZER INIT WITHOUT FROZEN WEIGHTS
@@ -1001,6 +1076,12 @@ class LFADS(nn.Module):
         Arguments:
             - t (int) : time-step
         '''
+#         if self.u_dim > 0:
+#             eps = Variable(torch.randn(self.batch_size, self.u_dim).to(self.device))
+#             self.g, self.f, self.c = self.jit_generator(input=Tuple(self.econ_c_1tT[t], eps), state=Tuple(self.g, self.f, self.c))
+            
+#         else:
+#             self.g, self.f, _ = self.jit_generator(input=Tuple(None, None), state = Tuple(self.g, self.f, None))
         
         # Concatenate ebcon_c and efcon_c outputs at time t with factors at time t-1 as input to controller for external inputs
         # Note: we take efcon at t+1, because the learnable biases are at first index for efcon
@@ -1022,7 +1103,7 @@ class LFADS(nn.Module):
             self.u = Variable(torch.randn(self.batch_size, self.u_dim).to(self.device))*torch.exp(0.5*self.u_logvar) \
                         + self.u_mean
         else:
-            self.u = None
+            self.u = torch.randn(self.batch_size, self.u_dim).to(self.device)
 
         # Update generator
         self.g = torch.clamp(self.gru_generator(self.u, self.g), min=-self.clip_val, max=self.clip_val)
@@ -1302,9 +1383,16 @@ class LFADS(nn.Module):
         self(x)
 
         # Calculate l2 regularisation penalty
-        self.l2_loss = self.l2_gen_scale * self.gru_generator.hidden_weight_l2_norm()
+        def hidden_weight_l2_norm(M):
+            return M.fc_h_ru.weight.norm(2)/M.fc_h_ru.weight.numel() + M.fc_rh_c.weight.norm(2)/M.fc_rh_c.weight.numel()
+            
+        self.l2_loss = self.l2_gen_scale * hidden_weight_l2_norm(self.gru_generator)
         if self.u_dim > 0:
-            self.l2_loss += self.l2_con_scale * self.gru_controller_c.hidden_weight_l2_norm()
+            self.l2_loss += self.l2_con_scale * hidden_weight_l2_norm(self.gru_controller_c)
+            
+#         self.l2_loss = self.l2_gen_scale * self.gru_generator.hidden_weight_l2_norm()
+#         if self.u_dim > 0:
+#             self.l2_loss += self.l2_con_scale * self.gru_controller_c.hidden_weight_l2_norm()
 
         # Collect separate weighted losses
         kl_weight = self.cost_weights['kl']['weight']
