@@ -15,6 +15,7 @@ from utils import batchify_random_sample, update_param_dict
 from math import log, exp, pi
 
 import pdb
+import time
 
 #---------------------------------------------------
 def apply_requires_grad(module, requires_grad=True):
@@ -1753,7 +1754,7 @@ class LFADS(nn.Module):
             - fit_dict (dict) : dict containing objects necessary for fitting
             - health_check (bool) : whether to perform health check
         '''
-        
+        start = time.time()
 
         self.train()
 
@@ -1764,8 +1765,10 @@ class LFADS(nn.Module):
         # Validate model. Same as training, but no history tracking, backprop, or optimization steps
         valid_loss, valid_recon_loss, valid_kl_loss = self._test_one_epoch(fit_dict=fit_dict)
 
+        epoch_runtime = time.time() - start
+
         # Print Epoch Loss
-        print('Epoch: %4d, Step: %5d, training loss: %.3f, validation loss: %.3f'%(self.epochs+1, self.current_step, train_loss, valid_loss), flush=True)
+        print('Epoch: %4d, Step: %5d, training loss: %.3f, validation loss: %.3f, Runtime: %.4f secs'%(self.epochs+1, self.current_step, train_loss, valid_loss, epoch_runtime), flush=True)
 
         # Apply learning rate decay function
         if self.scheduler_on:
@@ -1813,7 +1816,9 @@ class LFADS(nn.Module):
             if self.valid_loss_store[-1] < self.best:
                 self.best = self.valid_loss_store[-1]
                 # saving checkpoint
+                start = time.time()
                 self.save_checkpoint()
+                print('Saving checkpoint: %.4f s taken'%(time.time()-start), flush=True)
 
                 if fit_dict['use_tensorboard']:
                     figs_dict_train = self.plot_summary(data= fit_dict['train_dl'].dataset.tensors[0], truth= fit_dict['train_truth'])

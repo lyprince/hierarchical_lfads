@@ -18,9 +18,8 @@ echo $MODEL
 mkdir $SLURM_TMPDIR/synth_data
 mkdir $SLURM_TMPDIR/models
 
-if [-e $HOME/synth_data/${SYSTEM}_${SEED}]
+if [ -e $HOME/synth_data/${SYSTEM}_${SEED} ]
 then
-  mkdir $SLURM_TMPDIR/synth_data
   cp $HOME/synth_data/${SYSTEM}_${SEED} $SLURM_TMPDIR/synth_data/${SYSTEM}_${SEED}
 else
   python generate_synthetic_data.py -d $SYSTEM -s $SEED -o $SLURM_TMPDIR -p $HOME/hierarchical_lfads/synth_data/${SYSTEM}_params.yaml
