@@ -43,12 +43,22 @@ def main():
     data_dict = read_data(args.data_path)
     datatype = model_name if model_name in ['spikes', 'oasis'] else 'fluor'
 
-    train_data = torch.Tensor(data_dict['train_data']).to(device)
-    valid_data = torch.Tensor(data_dict['valid_data']).to(device)
+    train_data = torch.Tensor(data_dict['train_spikes']).to(device)
+    valid_data = torch.Tensor(data_dict['valid_spikes']).to(device)
 
-    train_truth = {'rates'  : data_dict['train_truth']}
+    train_truth = {'rates'  : data_dict['train_rates']}
 
-    valid_truth = {'rates'  : data_dict['valid_truth']}
+    valid_truth = {'rates'  : data_dict['valid_rates']}
+
+    if model_name == 'ladder':
+        train_truth['spikes'] = data_dict['train_spikes']
+        valid_truth['spikes'] = data_dict['valid_spikes']
+
+    if 'train_latent' in data_dict.keys():
+        train_truth['latent'] = data_dict['train_latent']
+
+    if 'valid_latent' in data_dict.keys():
+        valid_truth['latent'] = data_dict['valid_latent']
 
     train_ds      = torch.utils.data.TensorDataset(train_data)
     valid_ds      = torch.utils.data.TensorDataset(valid_data)
