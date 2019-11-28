@@ -1321,9 +1321,9 @@ class LFADS(nn.Module):
         self(x)
 
         # Calculate l2 regularisation penalty
-        self.l2_loss = self.l2_gen_scale * self.gru_generator.hidden_weight_l2_norm()
+        self.l2_loss = 0.5 * self.l2_gen_scale * self.gru_generator.hidden_weight_l2_norm()
         if self.u_dim > 0:
-            self.l2_loss += self.l2_con_scale * self.gru_controller_c.hidden_weight_l2_norm()
+            self.l2_loss += 0.5 * self.l2_con_scale * self.gru_controller_c.hidden_weight_l2_norm()
 
         # Collect separate weighted losses
         kl_weight = self.cost_weights['kl']['weight']
