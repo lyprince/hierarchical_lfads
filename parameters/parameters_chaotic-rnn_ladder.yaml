@@ -1,7 +1,7 @@
 a_controller_dim: 256
 a_encoder_dim: 256
 a_prior_var_kappa: 0.1
-a_prior_var_max: .inf
+a_prior_var_max: 10
 a_prior_var_min: 0.0001
 betas: !!python/tuple
 - 0.9
@@ -9,29 +9,30 @@ betas: !!python/tuple
 c_encoder_dim: 128
 clip_val: 5.0
 c_controller_dim: 128
-dataset_name: chaotic_rnn
+dataset_name: chaotic-rnn
 datatype: calcium
 deep_freeze : true
 epsilon: 0.1
 factors_dim: 20
-g0_encoder_dim: 200
+g0_encoder_dim: 128
 g0_prior_kappa: 0.1
 g0_prior_var_max: 0.1
 g0_prior_var_min: 0.1
+g0_dim: 64
 g_dim: 200
-h0_encoder_dim: 400
+h0_encoder_dim: 256
 h0_prior_var_kappa: 0.1
 h0_prior_var_max: 0.1
 h0_prior_var_min: 0.1
-h_dim: 250
+h_dim: 200
 keep_prob: 0.95
 kl_weight_min: 0.0
-kl_weight_schedule_dur: 1600
+kl_weight_schedule_dur: 2000
 kl_weight_schedule_start: 0
 l2_con_scale: 0
 l2_gen_scale: 2000
 l2_weight_min: 0.0
-l2_weight_schedule_dur: 1600
+l2_weight_schedule_dur: 2000
 l2_weight_schedule_start: 0.0
 learning_rate: 0.01
 learning_rate_decay: 0.95
@@ -44,6 +45,6 @@ scheduler_on: true
 scheduler_patience: 6
 u_dim: 1
 u_prior_kappa: 0.1
-u_prior_var_min : 0.1
-u_prior_var_max : 0.1
+u_prior_var_min : 0.001
+u_prior_var_max : 10
 use_weight_schedule_fn: true

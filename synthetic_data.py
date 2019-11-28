@@ -169,7 +169,7 @@ def generate_lorenz_data(N_trials, N_inits, N_cells, N_steps, N_stepsinbin = 1,
 
 def generate_chaotic_rnn_data(Ninits= 400, Ntrial= 10, Ncells= 50, Nsteps=200,
                               trainp= 0.8, dt_rnn= 0.1, dt_spike= 0.1,
-                              tau=0.25, gamma=1.5, maxRate=5, B=20,
+                              tau=0.25, gamma=2.5, maxRate=10, B=20,
                               tau_c = 0.4, inc_c=1.0, sigma=0.2,
                               seed=5, save=False, save_dir='./'):
     

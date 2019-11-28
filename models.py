@@ -33,6 +33,14 @@ def r_squared(x, y):
     L = fit_linear_model(x, y)
     return L.score(x, y), L
 
+class Identity(nn.Module):
+    def __init__(self, in_features, out_features):
+        super(Identity, self).__init__()
+        self.weight = torch.eye(in_features)
+    
+    def forward(self, x):
+        return x.matmul(self.weight)
+
 #-------------------------
 # COST FUNCTION COMPONENTS
 #-------------------------
@@ -472,6 +480,7 @@ class LFADS(nn.Module):
                                 'run_name'                 : 'tmp',
                                 
                                 ### MODEL PARAMETERS ### 
+                                'g0_dim'                   : 100,
                                 'g_dim'                    : 100,
                                 'u_dim'                    : 1,
                                 'factors_dim'              : 20,
@@ -632,8 +641,8 @@ class LFADS(nn.Module):
         # takes as inputs:
         #  - the forward encoder for g0 at time T (g0_enc_f_T)
         #  - the backward encoder for g0 at time 1 (g0_enc_b_0]
-        self.fc_g0mean   = nn.Linear(in_features= 2 * self.g0_encoder_dim, out_features= self.g_dim)
-        self.fc_g0logvar = nn.Linear(in_features= 2 * self.g0_encoder_dim, out_features= self.g_dim)
+        self.fc_g0mean   = nn.Linear(in_features= 2 * self.g0_encoder_dim, out_features= self.g0_dim)
+        self.fc_g0logvar = nn.Linear(in_features= 2 * self.g0_encoder_dim, out_features= self.g0_dim)
         
         apply_requires_grad(module = self.fc_g0mean, requires_grad=requires_grad)
         apply_requires_grad(module = self.fc_g0logvar, requires_grad=requires_grad)
@@ -679,6 +688,11 @@ class LFADS(nn.Module):
         #   Examples: fc_factors= "fully connected layer, variable = factors"
         #             gru_Egen_forward = "gated recurrent unit layer, encoder for generator, forward direction"
         
+        # g0 to generator initial condition
+        if self.g0_dim == self.g_dim:
+            self.fc_icgen = Identity(in_features=self.g0_dim, out_features=self.g_dim)
+        else:
+            self.fc_icgen         = nn.Linear(in_features=self.g0_dim, out_features= self.g_dim)
         
         # Generator RNN
         self.gru_generator    = LFADS_GenGRUCell(input_size= self.u_dim, hidden_size= self.g_dim)
@@ -693,6 +707,7 @@ class LFADS(nn.Module):
         # poisson process rates from factors
         self.fc_logrates = nn.Linear(in_features= self.factors_dim, out_features= self.inputs_dim)
         
+        apply_requires_grad(module = self.fc_icgen, requires_grad=requires_grad)
         apply_requires_grad(module = self.gru_generator, requires_grad=requires_grad)
         apply_requires_grad(module = self.fc_factors, requires_grad=requires_grad)
         apply_requires_grad(module = self.fc_logrates, requires_grad=requires_grad)
@@ -765,7 +780,7 @@ class LFADS(nn.Module):
         # -------------------------------
     
         # Set prior mean for generator initial conditions g0
-        self.g0_prior_mu          = nn.Parameter(torch.zeros(self.g_dim), requires_grad=requires_grad)
+        self.g0_prior_mu          = nn.Parameter(torch.zeros(self.g0_dim), requires_grad=requires_grad)
         
         # Check if prior variance for initial conditions has a minimum and maximum hyperparameter,
         # if not, set to be same as inital prior variance
@@ -776,19 +791,19 @@ class LFADS(nn.Module):
         
         # if prior variance minimum and maximum are the same, set to be fixed throughout training
         if np.isclose(self.g0_prior_var_min, self.g0_prior_var_max):
-            self.g0_prior_logkappa = torch.ones(self.g_dim).to(self.device) * log(self.g0_prior_kappa)
+            self.g0_prior_logkappa = torch.ones(self.g0_dim).to(self.device) * log(self.g0_prior_kappa)
             
         # if prior variance minimum and maximum are different, set to be a trainable parameter
         else:
-            self.g0_prior_logkappa = nn.Parameter(torch.ones(self.g_dim)  * log(self.g0_prior_kappa), requires_grad=requires_grad)
+            self.g0_prior_logkappa = nn.Parameter(torch.ones(self.g0_dim)  * log(self.g0_prior_kappa), requires_grad=requires_grad)
                 
         # Setup generator input prior parameters (if necessary)
         if self.u_dim > 0:
             # Set prior mean for inputs
-            self.u_prior_mu       = nn.Parameter(torch.zeros(self.u_dim), requires_grad=requires_grad)
+            self.u_prior_mu       = torch.zeros(self.u_dim, device=self.device)
             
             # Set prior autoregressive term for inputs 
-            self.u_prior_alp      = nn.Parameter(torch.ones(self.u_dim) * exp(-1/self.u_prior_tau), requires_grad=requires_grad)
+            self.u_prior_logtau      = nn.Parameter(torch.ones(self.u_dim) * log(self.u_prior_tau), requires_grad=requires_grad)
             
             # Check if prior variance for generator inputs has a minimum and maximum hyperparameter,
             # if not, set to be same as inital prior variance
@@ -851,10 +866,10 @@ class LFADS(nn.Module):
         batch_size = batch_size if batch_size is not None else self.batch_size
                
         # Initialise initial condition prior mean with new batch dimension
-        self.g0_prior_mean   = torch.ones(batch_size, self.g_dim).to(self.device) * self.g0_prior_mu          # g0 prior mean
+        self.g0_prior_mean   = torch.ones(batch_size, self.g0_dim).to(self.device) * self.g0_prior_mu          # g0 prior mean
         
         # Initialise initial condition prior logvariance with new batch dimension
-        self.g0_prior_logvar = torch.ones(batch_size, self.g_dim).to(self.device) * torch.clamp(self.g0_prior_logkappa, log(self.g0_prior_var_min), log(self.g0_prior_var_max))    # g0 prior logvar
+        self.g0_prior_logvar = torch.ones(batch_size, self.g0_dim).to(self.device) * torch.clamp(self.g0_prior_logkappa, log(self.g0_prior_var_min), log(self.g0_prior_var_max))    # g0 prior logvar
                         
         # Initialise generator encoder inital state with new batch dimension
         self.efgen_g0 = torch.ones((batch_size, self.g0_encoder_dim)).to(self.device) * self.efgen_g0_init  # Forward generator encoder
@@ -868,7 +883,7 @@ class LFADS(nn.Module):
             self.u_prior_logvar  = torch.ones(batch_size, self.u_dim).to(self.device) * torch.clamp(self.u_prior_logkappa, log(self.u_prior_var_min), log(self.u_prior_var_max))     # u prior logvar
             
             # Initialise initial condition prior autocorrelation with new batch dimension
-            self.u_prior_alpha   = torch.ones(batch_size, self.u_dim).to(self.device) * self.u_prior_alp.clamp(exp(-1/self.u_prior_tau_min), exp(-1/self.u_prior_tau_max) - 1e-12)          # u prior_tau 
+            self.u_prior_tau   = torch.ones(batch_size, self.u_dim).to(self.device) * self.u_prior_logtau.exp()          # u prior_tau 
             
             self.efcon_c = torch.ones((batch_size, self.c_encoder_dim)).to(self.device) * self.efcon_c_init  # Forward controller encoder
             self.ebcon_c = torch.ones((batch_size, self.c_encoder_dim)).to(self.device) * self.ebcon_c_init  # Backward controller encoder
@@ -921,11 +936,14 @@ class LFADS(nn.Module):
         self.g0_logvar = self.fc_g0logvar(self.egen_g0_1T_dropout)
         
         # Sample initial generator state
-        self.g         = Variable(torch.randn(self.batch_size, self.g_dim).to(self.device))*torch.exp(0.5 * self.g0_logvar)\
+        self.g0         = Variable(torch.randn(self.batch_size, self.g0_dim).to(self.device))*torch.exp(0.5 * self.g0_logvar)\
                          + self.g0_mean
         
         # Dropout some of the generator state for sending to factors, but keep generator state intact for feeding back to generator
-        self.g_do      = self.dropout(self.g)
+        self.g      = self.fc_icgen(self.g0)
+        
+        if self.keep_prob < 1.0:
+            self.g_do   = self.dropout(self.g)
         
         # Initialise factors
         self.f         = self.fc_factors(self.g_do)
@@ -975,8 +993,8 @@ class LFADS(nn.Module):
 
                 elif t > 0:
                     # Calculate autoregressive KL loss
-                    gp_prior_mean   = (self.u_prev - self.u_prior_mean) * self.u_prior_alpha + self.u_prior_mean
-                    gp_prior_logvar = torch.log(1 - self.u_prior_alpha**2) + self.u_prior_logvar
+                    gp_prior_mean   = (self.u_prev - self.u_prior_mean) * torch.exp(-1/self.u_prior_tau) + self.u_prior_mean
+                    gp_prior_logvar = torch.log(1 - torch.exp(-1/self.u_prior_tau).pow(2)) + self.u_prior_logvar
 
                     self.kl_loss = self.kl_loss + KLCostGaussian(self.u_mean, self.u_logvar,
                                                    gp_prior_mean, gp_prior_logvar)/self.batch_size
@@ -2370,6 +2388,7 @@ class LadderLFADS(LFADS):
                                 'run_name'                 : 'tmp',
                                 
                                 ### MODEL HYPERPARAMETERS ### 
+                                'g0_dim'                   : 100,
                                 'g_dim'                    : 100,
                                 'u_dim'                    : 1,
                                 'h_dim'                    : 100,
@@ -2741,11 +2760,13 @@ class LadderLFADS(LFADS):
         
         self.g0_mean   = self.fc_g0mean(self.egen_g0_1T_dropout)
         self.g0_logvar = self.fc_g0logvar(self.egen_g0_1T_dropout)
-        self.g         = Variable(torch.randn(self.batch_size, self.g_dim).to(self.device))*torch.exp(0.5 * self.g0_logvar)\
+        self.g0         = Variable(torch.randn(self.batch_size, self.g0_dim).to(self.device))*torch.exp(0.5 * self.g0_logvar)\
                          + self.g0_mean
         
+        self.g         = self.fc_icgen(self.g0)
         # Dropout some of the generator state for sending to factors, but keep generator state intact for feeding back to generator
-        self.g_do      = self.dropout(self.g)
+        if self.keep_prob < 1.0:
+            self.g_do      = self.dropout(self.g)
         
         # Initialise factors
         self.f         = self.fc_factors(self.g_do)
@@ -2861,8 +2882,8 @@ class LadderLFADS(LFADS):
                                            self.h_prior_mean, self.h_prior_logvar)/self.batch_size
             
             if self.u_dim > 0:
-                gp_prior_mean   = (self.u_prev - self.u_prior_mean) * self.u_prior_alpha + self.u_prior_mean
-                gp_prior_logvar = torch.log(1 - self.u_prior_alpha**2) + self.u_prior_logvar
+                gp_prior_mean   = (self.u_prev - self.u_prior_mean) * torch.exp(-1/self.u_prior_tau) + self.u_prior_mean
+                gp_prior_logvar = torch.log(1 - torch.exp(-1/self.u_prior_tau).pow(2)) + self.u_prior_logvar
 
                 self.kl_deep_loss = self.kl_deep_loss + KLCostGaussian(self.u_mean, self.u_logvar,
                                                                        gp_prior_mean, gp_prior_logvar)/self.batch_size
@@ -3486,11 +3507,14 @@ class MomentLFADS(LFADS):
         # Sample initial conditions for generator from g0 posterior distribution
         self.g0_mean   = self.fc_g0mean(egen_g0)
         self.g0_logvar = torch.clamp(self.fc_g0logvar(egen_g0), min=log(self.g0_post_var_min), max=log(self.g0_post_var_max))
-        self.g         = Variable(torch.randn(self.batch_size, self.g_dim).to(self.device))*torch.exp(0.5*self.g0_logvar)\
+        self.g0        = Variable(torch.randn(self.batch_size, self.g0_dim).to(self.device))*torch.exp(0.5*self.g0_logvar)\
                          + self.g0_mean
 
+        self.g      = self.fc_icgen(self.g0)
+
         # Dropout some of the generator state for sending to factors, but keep generator state intact for feeding back to generator
-        self.g_do      = self.dropout(self.g)
+        if self.keep_prob < 1.0:
+            self.g_do   = self.dropout(self.g)
         
         # Initialise factors
         self.f         = self.fc_factors(self.g_do)
