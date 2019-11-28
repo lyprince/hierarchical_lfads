@@ -282,7 +282,7 @@ class LFADS_GenGRUCell(nn.Module):
         return torch.mul(u, h) + torch.mul(1 - u, c)
     
     def hidden_weight_l2_norm(self):
-        return self.fc_h_ru.weight.norm(2)/self.fc_h_ru.weight.numel() + self.fc_rh_c.weight.norm(2)/self.fc_rh_c.weight.numel()
+        return self.fc_h_ru.weight.norm(2).pow(2)/self.fc_h_ru.weight.numel() + self.fc_rh_c.weight.norm(2).pow(2)/self.fc_rh_c.weight.numel()
     
 
 #--------
@@ -1786,7 +1786,7 @@ class LFADS(nn.Module):
         epoch_runtime = time.time() - start
 
         # Print Epoch Loss
-        print('Epoch: %4d, Step: %5d, training loss: %.3f, validation loss: %.3f, Runtime: %.4f secs'%(self.epochs+1, self.current_step, train_loss, valid_loss, epoch_runtime), flush=True)
+        print('Epoch: %4d, Step: %5d, Losses [Train, Valid]: Total [%.2f, %.2f], Recon [%.2f, %.2f], KL [%.2f, %.2f], L2 %.2f, Runtime: %.4f secs'%(self.epochs+1, self.current_step, train_loss, valid_loss, train_recon_loss, valid_recon_loss, train_kl_loss, valid_kl_loss, float(self.l2_loss.data), epoch_runtime), flush=True)
 
         # Apply learning rate decay function
         if self.scheduler_on:
