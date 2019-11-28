@@ -76,7 +76,14 @@ def main():
     if args.batch_size:
         batch_size = args.batch_size
     else:
-        batch_size = int(num_trials/16)
+        batch_size = int(num_trials/25)
+
+    total_params = 0
+    for ix, (name, param) in enumerate(model.named_parameters()):
+        print(ix, name, list(param.shape), param.numel(), param.requires_grad)
+        total_params += param.numel()
+
+    print('Total parameters: %i'%total_params)
 
     model.fit(train_dataset=train_ds, valid_dataset=valid_ds,
           train_truth=train_truth, valid_truth=valid_truth,

@@ -25,7 +25,7 @@ else
   python generate_synthetic_data.py -d $SYSTEM -s $SEED -o $SLURM_TMPDIR -p $HOME/hierarchical_lfads/synth_data/${SYSTEM}_params.yaml
 fi
 
-python run_lfads.py -d $SLURM_TMPDIR/synth_data/${SYSTEM}_${SEED} -p parameters/parameters_${SYSTEM}_${MODEL}.yaml -o $SLURM_TMPDIR
+python run_lfads_synth.py -d $SLURM_TMPDIR/synth_data/${SYSTEM}_${SEED} -p parameters/parameters_${SYSTEM}_${MODEL}.yaml -o $SLURM_TMPDIR
 
 cp -r $SLURM_TMPDIR/models $HOME/hierarchical_lfads
 cp -r $SLURM_TMPDIR/synth_data $HOME/hierarchical_lfads
