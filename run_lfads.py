@@ -15,8 +15,10 @@ parser.add_argument('--max_epochs', default=2000, type=int)
 parser.add_argument('--batch_size', default=None, type=int)
 
 def main():
+    
     device = 'cuda' if torch.cuda.is_available() else 'cpu'; print('Using device: %s'%device, flush=True)
     args = parser.parse_args()
+    
     data_name = args.data_path.split('/')[-1]
     _, system_name, model_name = args.parameter_path.split('/')[-1].split('.')[0].split('_')
 

@@ -913,7 +913,7 @@ class LFADS(nn.Module):
           - x (torch.Tensor): Single-trial data of size batch size x time-steps x input dimension
         '''
         
-        # Dropout some data
+        # (Dropout) some data
         if self.keep_prob < 1.0:
             x = self.dropout(x)
         
