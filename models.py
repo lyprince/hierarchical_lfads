@@ -36,10 +36,9 @@ def r_squared(x, y):
 class Identity(nn.Module):
     def __init__(self, in_features, out_features):
         super(Identity, self).__init__()
-        self.weight = torch.eye(in_features)
     
     def forward(self, x):
-        return x.matmul(self.weight)
+        return x
 
 #-------------------------
 # COST FUNCTION COMPONENTS
@@ -690,7 +689,7 @@ class LFADS(nn.Module):
         
         # g0 to generator initial condition
         if self.g0_dim == self.g_dim:
-            self.fc_icgen = Identity(in_features=self.g0_dim, out_features=self.g_dim)
+            self.fc_icgen = Identity(in_features=self.g0_dim, out_features=self.g_dim).to(self.device)
         else:
             self.fc_icgen         = nn.Linear(in_features=self.g0_dim, out_features= self.g_dim)
         
@@ -1786,7 +1785,7 @@ class LFADS(nn.Module):
         epoch_runtime = time.time() - start
 
         # Print Epoch Loss
-        print('Epoch: %4d, Step: %5d, Losses [Train, Valid]: Total [%.2f, %.2f], Recon [%.2f, %.2f], KL [%.2f, %.2f], L2 %.2f, Runtime: %.4f secs'%(self.epochs+1, self.current_step, train_loss, valid_loss, train_recon_loss, valid_recon_loss, train_kl_loss, valid_kl_loss, self.l2_weight * float(self.l2_loss.data), epoch_runtime), flush=True)
+        print('Epoch: %4d, Step: %5d, Losses [Train, Valid]: Total [%.2f, %.2f], Recon [%.2f, %.2f], KL [%.2f, %.2f], L2 %.2f, Runtime: %.4f secs'%(self.epochs+1, self.current_step, train_loss, valid_loss, train_recon_loss, valid_recon_loss, train_kl_loss, valid_kl_loss, float(self.l2_loss.data), epoch_runtime), flush=True)
 
         # Apply learning rate decay function
         if self.scheduler_on:

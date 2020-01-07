@@ -20,7 +20,7 @@ class Plotter(object):
         self.truth = truth
     #------------------------------------------------------------------------------
     
-    def plot_summary(self, model, data, num_average=100, ix=None):
+    def plot_summary(self, model, data, num_average=200, ix=None):
         
         '''
         plot_summary(data, truth=None, num_average=100, ix=None)
@@ -47,22 +47,24 @@ class Plotter(object):
         
         model.eval()
         with torch.no_grad():
-            recon, factors = model(batch_example)
+            recon, factors = model(batch_example.permute(1, 0, 2))
+        
         orig = data[ix].cpu().numpy()
+#         print(batch_example.shape, data.shape, recon['data'].shape)
         
 #         pdb.set_trace()
-        figs_dict['traces'] = self.plot_traces(recon['data'].mean(dim=0).detach().cpu().numpy(), orig, mode='activity', norm=False)
+        figs_dict['traces'] = self.plot_traces(recon['data'].mean(dim=1).detach().cpu().numpy(), orig, mode='activity', norm=False)
         figs_dict['traces'].suptitle('Actual fluorescence trace vs.\nestimated mean for a sampled trial')
         
         if self.truth:
             if 'rates' in self.truth.keys():
-                recon_rates = recon['rates'].mean(dim=0).cpu().numpy()
+                recon_rates = recon['rates'].mean(dim=1).cpu().numpy()
                 true_rates  = self.truth['rates'][ix]
                 figs_dict['truth_rates'] = self.plot_traces(recon_rates, true_rates, mode='rand')
                 figs_dict['truth_rates'].suptitle('Reconstructed vs ground-truth rate function')
             
             if 'latent' in self.truth.keys():
-                pred_factors = factors.mean(dim=0).cpu().numpy()
+                pred_factors = factors.mean(dim=1).cpu().numpy()
                 true_factors = self.truth['latent'][ix]
                 figs_dict['truth_factors'] = self.plot_traces(pred_factors, true_factors, num_traces=true_factors.shape[-1], ncols=1)
                 figs_dict['truth_factors'].suptitle('Reconstructed vs ground-truth factors')

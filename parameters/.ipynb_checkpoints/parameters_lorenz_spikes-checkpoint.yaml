@@ -10,6 +10,7 @@ g0_encoder_dim: 64
 g0_prior_kappa: 0.1
 g0_prior_var_max: 0.1
 g0_prior_var_min: 0.1
+g0_dim: 64
 g_dim: 64
 keep_prob: 0.95
 kernel_dim: 20

@@ -253,10 +253,14 @@ class LFADS_Net(nn.Module):
         Initialize weights of network
         '''
         
+        def standard_init(weights):
+            k = weights.shape[1] # dimensionality of inputs
+            weights.data.normal_(std=k**-0.5) # inplace resetting W ~ N(0, 1/sqrt(K))
+        
         with torch.no_grad():
             for name, p in self.named_parameters():
                 if 'weight' in name:
-                    nn.init.xavier_normal_(p.data)
+                    standard_init(p)
 
             if self.normalize_factors:
                 self.generator.fc_factors.weight.data = F.normalize(self.generator.fc_factors.weight.data, dim=1)
