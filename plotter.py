@@ -47,7 +47,7 @@ class Plotter(object):
         
         model.eval()
         with torch.no_grad():
-            recon, factors = model(batch_example.permute(1, 0, 2))
+            recon, (factors, inputs) = model(batch_example.permute(1, 0, 2))
         
         orig = data[ix].cpu().numpy()
 #         print(batch_example.shape, data.shape, recon['data'].shape)
@@ -70,12 +70,18 @@ class Plotter(object):
                 figs_dict['truth_factors'].suptitle('Reconstructed vs ground-truth factors')
             else:
                 figs_dict['factors'] = self.plot_factors(factors.cpu().numpy())
+                
+            if 'spikes' in self.truth.keys():
+                recon_spikes = recon['spikes'].mean(dim=1).cpu().numpy()
+                true_rates  = self.truth['spikes'][ix]
+                figs_dict['truth_spikes'] = self.plot_traces(recon_spikes, true_spikes, mode='rand')
+                figs_dict['truth_spikes'].suptitle('Reconstructed vs ground-truth rate function')
         
         else:
-            figs_dict['factors'] = self.plot_factors(factors.cpu().numpy())
+            figs_dict['factors'] = self.plot_factors(factors)
         
-        if hasattr(model, 'u_posterior_mean'):
-            figs_dict['inputs'] = self.plot_inputs(model.u_posterior_mean.cpu.numpy())
+        if inputs is not None:
+            figs_dict['inputs'] = self.plot_inputs(inputs)
         return figs_dict
     
     #------------------------------------------------------------------------------W

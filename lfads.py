@@ -19,7 +19,7 @@ class LFADS_Net(nn.Module):
                                     'var'  : {'value': 0.1, 'learnable' : True},
                                      'tau'  : {'value': 10,  'learnable' : True}}},
                    clip_val=5.0, dropout=0.0, max_norm = 200,
-                   normalize_factors=True, device='cpu')
+                   do_normalize_factors=True, device='cpu')
                    
     Required Arguments:
         - input_size (int) : size of input dimensions (number of cells)
@@ -34,41 +34,43 @@ class LFADS_Net(nn.Module):
         - clip_val         (float): RNN hidden state value limit
         - dropout          (float): dropout probability
         - max_norm           (int): maximum gradient norm
-        - normalize_factors (bool): whether to normalize factors
+        - do_normalize_factors (bool): whether to normalize factors
         - device          (string): device to use
                    
     
     '''
     
-    def __init__(self, input_size, factor_size = 4,
-                 g_encoder_size = 64, c_encoder_size = 64,
-                 g_latent_size = 64, u_latent_size = 1,
-                 controller_size= 64, generator_size = 64,
+    def __init__(self, input_size, output_size = None, factor_size = 4,
+                 g_encoder_size  = 64, c_encoder_size = 64,
+                 g_latent_size   = 64, u_latent_size  = 1,
+                 controller_size = 64, generator_size = 64,
                  prior = {'g0' : {'mean' : {'value': 0.0, 'learnable' : True},
                                   'var'  : {'value': 0.1, 'learnable' : False}},
                           'u'  : {'mean' : {'value': 0.0, 'learnable' : False},
                                   'var'  : {'value': 0.1, 'learnable' : True},
                                   'tau'  : {'value': 10,  'learnable' : True}}},
-                 clip_val=5.0, dropout=0.0, max_norm = 200,
-                 normalize_factors=True, device='cpu'):
+                 clip_val=5.0, dropout=0.0, max_norm = 200, deep_freeze = False,
+                 do_normalize_factors=True, device='cpu'):
         
         super(LFADS_Net, self).__init__()
         
-        self.input_size        = input_size
-        self.g_encoder_size    = g_encoder_size
-        self.c_encoder_size    = c_encoder_size
-        self.g_latent_size     = g_latent_size
-        self.u_latent_size     = u_latent_size
-        self.controller_size   = controller_size
-        self.generator_size    = generator_size
-        self.factor_size       = factor_size
+        self.input_size           = input_size
+        self.output_size          = input_size if output_size is None else output_size
+        self.g_encoder_size       = g_encoder_size
+        self.c_encoder_size       = c_encoder_size
+        self.g_latent_size        = g_latent_size
+        self.u_latent_size        = u_latent_size
+        self.controller_size      = controller_size
+        self.generator_size       = generator_size
+        self.factor_size          = factor_size
         
-        self.clip_val          = clip_val
-        self.max_norm          = max_norm
-        self.normalize_factors = normalize_factors
-        self.device            = device
+        self.clip_val             = clip_val
+        self.max_norm             = max_norm
+        self.do_normalize_factors = do_normalize_factors
+        self.device               = device
+        self.deep_freeze          = deep_freeze
         
-        self.dropout           = torch.nn.Dropout(dropout)
+        self.dropout              = torch.nn.Dropout(dropout)
 
         # Initialize encoder RNN
         self.encoder     = LFADS_Encoder(input_size     = self.input_size,
@@ -99,7 +101,7 @@ class LFADS_Net(nn.Module):
         else:
             self.fc_genstate = nn.Linear(in_features= self.g_latent_size, out_features= self.generator_size)
         
-        self.fc_rates    = nn.Linear(in_features= self.factor_size, out_features= self.input_size)
+        self.fc_rates    = nn.Linear(in_features= self.factor_size, out_features= self.output_size)
         
         # Initialize learnable biases
         self.g_encoder_init  = nn.Parameter(torch.zeros(2, self.g_encoder_size))
@@ -139,15 +141,12 @@ class LFADS_Net(nn.Module):
         '''
         import time
         tic = time.time()
-        # Check dimensions
-        self.steps_size, self.batch_size, input_size = input.shape
-        assert input_size == self.input_size, 'Input is expected to have dimensions [%i, %i, %i]'%(self.steps_size, self.batch_size, self.input_size)
         
         # Initialize hidden states
-        g_encoder_state, c_encoder_state, controller_state = self.initialize_hidden_states() 
+        g_encoder_state, c_encoder_state, controller_state = self.initialize_hidden_states(input) 
         
-        # Encode input and calculate and calculate generator initial condition variational posterior distribution 
-        self.g_posterior_mean, self.g_posterior_logvar, out_gru_c_enc = self.encoder(input, (g_encoder_state, c_encoder_state))
+        # Encode input and calculate and calculate generator initial condition variational posterior distribution
+        self.g_posterior_mean, self.g_posterior_logvar, out_gru_g_enc, out_gru_c_enc = self.encoder(input, (g_encoder_state, c_encoder_state))
 
         # Sample generator state
         generator_state = self.fc_genstate(self.sample_gaussian(self.g_posterior_mean, self.g_posterior_logvar))
@@ -179,7 +178,7 @@ class LFADS_Net(nn.Module):
                 self.u_posterior_logvar = torch.cat((self.u_posterior_logvar, u_logvar.unsqueeze(1)), dim=1)
 
                 # Sample generator input
-                generator_input = self.sample_gaussian(self.u_posterior_mean, self.u_posterior_logvar)
+                generator_input = self.sample_gaussian(u_mean, u_logvar)
                 # Append generator input to store
                 gen_inputs  = torch.cat((gen_inputs, generator_input.unsqueeze(0)), dim=0)
             else:
@@ -198,7 +197,7 @@ class LFADS_Net(nn.Module):
         # Create reconstruction dictionary
         recon = {'rates' : self.fc_rates(factors).exp()}
         recon['data'] = recon['rates'].clone()
-        return recon, factors
+        return recon, (factors, gen_inputs)
     
         
     def sample_gaussian(self, mean, logvar):
@@ -216,12 +215,16 @@ class LFADS_Net(nn.Module):
         # Scale and shift by mean and standard deviation
         return torch.exp(logvar*0.5)*eps + mean
     
-    def initialize_hidden_states(self):
+    def initialize_hidden_states(self, input):
         '''
         initialize_hidden_states()
         
         Initialize hidden states of recurrent networks
         '''
+        
+        # Check dimensions
+        self.steps_size, self.batch_size, input_size = input.shape
+        assert input_size == self.input_size, 'Input is expected to have dimensions [%i, %i, %i]'%(self.steps_size, self.batch_size, self.input_size)
         
         g_encoder_state  = (torch.ones(self.batch_size, 2,  self.g_encoder_size, device=self.device) * self.g_encoder_init).permute(1, 0, 2)
         if self.c_encoder_size > 0 and self.controller_size > 0 and self.u_latent_size > 0:
@@ -262,8 +265,11 @@ class LFADS_Net(nn.Module):
                 if 'weight' in name:
                     standard_init(p)
 
-            if self.normalize_factors:
-                self.generator.fc_factors.weight.data = F.normalize(self.generator.fc_factors.weight.data, dim=1)
+            if self.do_normalize_factors:
+                self.normalize_factors()
+                
+    def normalize_factors(self):
+        self.generator.fc_factors.weight.data = F.normalize(self.generator.fc_factors.weight.data, dim=1)
     
 class LFADS_Encoder(nn.Module):
     '''
@@ -317,11 +323,11 @@ class LFADS_Encoder(nn.Module):
             out_gru_c_enc, hidden_gru_c_enc = self.gru_c_encoder(self.dropout(input), gru_c_encoder_init.contiguous())
             out_gru_c_enc = out_gru_c_enc.clamp(min=-self.clip_val, max=self.clip_val)
         
-            return g0_mean, g0_logvar, out_gru_c_enc
+            return g0_mean, g0_logvar, out_gru_g_enc, out_gru_c_enc
         
         else:
             
-            return g0_mean, g0_logvar, None
+            return g0_mean, g0_logvar, out_gru_g_enc, None
         
 class LFADS_ControllerCell(nn.Module):
     

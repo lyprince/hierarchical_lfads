@@ -20,9 +20,9 @@ class RunManager():
         self.writer     = writer
         self.plotter    = plotter
             
-        self.max_epochs   = max_epochs
+        self.max_epochs      = max_epochs
         self.do_health_check = do_health_check
-        self.save_loc     = save_loc
+        self.save_loc        = save_loc
         
         self.epoch = 0
         self.step  = 0
@@ -53,8 +53,10 @@ class RunManager():
             for i,x in enumerate(self.train_dl):
                 x = x[0].permute(1, 0, 2)
                 self.optimizer.zero_grad()
-                recon, factors = self.model(x)
-                recon_loss, kl_loss, l2_loss = self.objective(x_orig= x, x_recon= recon['data'], model= self.model)
+                recon, latent = self.model(x)
+                recon_loss, kl_loss, l2_loss = self.objective(x_orig= x,
+                                                              x_recon= recon,
+                                                              model= self.model)
                 
                 loss = recon_loss + kl_loss + l2_loss
                 train_loss += float(loss.data)
@@ -75,9 +77,12 @@ class RunManager():
                 
                 self.objective.weight_schedule_fn(self.step)
                 
-                if self.model.normalize_factors:
+                if self.model.do_normalize_factors:
                     # Row-normalise fc_factors (See bullet-point 11 of section 1.9 of online methods)
-                    self.model.generator.fc_factors.weight.data = F.normalize(self.model.generator.fc_factors.weight.data, dim=1)
+                    self.model.normalize_factors()
+                    
+                if self.model.deep_freeze:
+                    self.optimizer, self.scheduler = self.model.unfreeze_parameters(self.step, self.optimizer, self.scheduler)
                     
                 self.step += 1
             
@@ -101,8 +106,8 @@ class RunManager():
             for i, x in enumerate(self.valid_dl):
                 with torch.no_grad():
                     x = x[0].permute(1, 0, 2)
-                    recon, factors = self.model(x)
-                    recon_loss, kl_loss, l2_loss = self.objective(x_orig= x, x_recon= recon['data'], model= self.model)
+                    recon, latent = self.model(x)
+                    recon_loss, kl_loss, l2_loss = self.objective(x_orig= x, x_recon= recon, model= self.model)
                     
                     loss = recon_loss + kl_loss + l2_loss
                     valid_loss += float(loss.data)
@@ -132,42 +137,30 @@ class RunManager():
             
             
             toc = time.time()
-            print('Epoch %4d, Epoch time = %.3f s, Loss [w] (train, valid): Total (%.3f, %.3f), Recon (%.2f, %.2f), KL [%.2f] (%.2f, %.2f), L2 [%.2f] (%.2f)'%(self.epoch, toc - tic, train_loss, valid_loss, train_recon_loss, valid_recon_loss, self.objective.loss_weights['kl']['weight'], train_kl_loss, valid_kl_loss, self.objective.loss_weights['l2']['weight'], epoch_l2_loss))
+            print('Epoch %5d, Epoch time = %.3f s, Loss (train, valid): Total (%.3f, %.3f), Recon (%.2f, %.2f), KL (%.2f, %.2f), L2 (%.2f)'%(self.epoch, toc - tic, train_loss, valid_loss, train_recon_loss, valid_recon_loss, train_kl_loss, valid_kl_loss, epoch_l2_loss))
         
 #         self.writer.add_graph(self.model, x)
             
     def write_to_tensorboard(self):
-            
-        # Write loss to full_loss_store dict
-        train_loss       = self.loss_dict['train']['total'][self.epoch-1]
-        train_recon_loss = self.loss_dict['train']['recon'][self.epoch-1]
-        train_kl_loss    = self.loss_dict['train']['kl'][self.epoch-1]
-
-        valid_loss       = self.loss_dict['valid']['total'][self.epoch-1]
-        valid_recon_loss = self.loss_dict['valid']['recon'][self.epoch-1]
-        valid_kl_loss    = self.loss_dict['valid']['kl'][self.epoch-1]
-        
-        l2_loss = self.loss_dict['l2'][self.epoch-1]
-        
-        # Retrieve loss weights from cost_weights dict
-        kl_weight = self.objective.loss_weights['kl']['weight']
-        l2_weight = self.objective.loss_weights['l2']['weight']
         
         # Write loss to tensorboard
-        self.writer.add_scalars('1_Loss/1_Total_Loss', {'Training'  : float(train_loss), 
-                                                        'Validation': float(valid_loss)}, self.epoch)
-
-        self.writer.add_scalars('1_Loss/2_Reconstruction_Loss', {'Training'  :  float(train_recon_loss), 
-                                                                 'Validation': float(valid_recon_loss)}, self.epoch)
-
-        self.writer.add_scalars('1_Loss/3_KL_Loss' , {'Training'  : float(train_kl_loss), 
-                                                      'Validation': float(valid_kl_loss)}, self.epoch)
-
+        
+        for ix, key in enumerate(self.loss_dict['train'].keys()):
+            train_loss = self.loss_dict['train'][key][self.epoch-1]
+            valid_loss = self.loss_dict['valid'][key][self.epoch-1]
+            
+            self.writer.add_scalars('1_Loss/%i_%s'%(ix+1, key), {'Training' : float(train_loss),
+                                                                 'Validation' : float(valid_loss)}, self.epoch)
+            
+        l2_loss = self.loss_dict['l2'][self.epoch-1]
         self.writer.add_scalar('1_Loss/4_L2_loss', float(l2_loss), self.epoch)
 
-        self.writer.add_scalar('2_Optimizer/1_Learning_Rate', self.optimizer.param_groups[0]['lr'], self.epoch)
-        self.writer.add_scalar('2_Optimizer/2_KL_weight', kl_weight, self.epoch)
-        self.writer.add_scalar('2_Optimizer/3_L2_weight', l2_weight, self.epoch)
+        for jx, grp in enumerate(self.optimizer.param_groups):
+            self.writer.add_scalar('2_Optimizer/1.%i_Learning_Rate_PG'%(jx+1), grp['lr'], self.epoch)
+        
+        for kx, key in enumerate(self.objective.loss_weights.keys()):
+            weight = self.objective.loss_weights[key]['weight']
+            self.writer.add_scalar('2_Optimizer/2.%i_%s_weight'%(kx+1, key), weight, self.epoch)
         
     def plot_to_tensorboard(self):
         figs_dict_train = self.plotter['train'].plot_summary(model = self.model,
@@ -233,6 +226,9 @@ class RunManager():
                     'sched': self.scheduler.state_dict(), 'run_manager' : train_dict},
                      self.save_loc+'checkpoints/' + output_filename + '.pth')
         
+    #------------------------------------------------------------------------------
+    #------------------------------------------------------------------------------
+        
     def load_checkpoint(self, input_filename='recent'):
         if os.path.exists(self.save_loc + 'checkpoints/' + input_filename + '.pth'):
             state_dict = torch.load(self.save_loc + 'checkpoints/' + input_filename + '.pth')
@@ -245,3 +241,4 @@ class RunManager():
             self.objective.loss_weights = state_dict['run_manager']['loss_weights']
             self.epoch = state_dict['run_manager']['epoch']
             self.step  = state_dict['run_manager']['step']
+            

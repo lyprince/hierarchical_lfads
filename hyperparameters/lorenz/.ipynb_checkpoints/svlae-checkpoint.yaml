@@ -1,0 +1,93 @@
+optimizer:
+  lr_init: 0.01
+  betas: !!python/tuple
+  - 0.9
+  - 0.99
+  eps: 0.1
+
+scheduler:
+  lr_min: 1.0e-05
+  scheduler_factor: 0.95
+  scheduler_patience: 6
+  scheduler_cooldown: 0
+
+objective:
+  kl_obs_weight_init : 0.0
+  kl_obs_weight_min: 0.0
+  kl_obs_weight_max: 1.0
+  kl_obs_weight_schedule_dur: 1600
+  kl_obs_weight_schedule_start: 0
+  kl_deep_weight_init : 0.0
+  kl_deep_weight_min: 0.0
+  kl_deep_weight_max: 1.0
+  kl_deep_weight_schedule_dur: 1600
+  kl_deep_weight_schedule_start: 1600
+  l2_weight_init: 0.0
+  l2_weight_min: 0.0
+  l2_weight_max: 1.0
+  l2_weight_schedule_dur: 1600
+  l2_weight_schedule_start: 1600
+  l2_con_scale: 0
+  l2_gen_scale: 250
+
+model:
+  factor_size: 3
+  g1_encoder_size: 128
+  c1_encoder_size: 128
+  g1_latent_size: 100
+  u1_latent_size: 100
+  c1_controller_size: 128
+  g2_encoder_size: 64
+  c2_encoder_size: 0
+  g2_latent_size: 64
+  u2_latent_size: 0
+  c2_controller_size: 0
+  generator_size: 64
+  
+  obs:
+    gain: 
+      value: 1.0
+      learnable: False
+    tau: 
+      value: 0.4
+      learnable: False
+    bias:
+      value: 0.0
+      learnable: False
+    var:
+      value: 0.1
+      learnable: True
+  
+  prior:
+    obs:
+      g0: 
+        mean: 
+          value: 0.0
+          learnable: true
+        var: 
+          value: 0.1
+          learnable: false
+      u: 
+        mean: 
+          value: 0.0
+          learnable: true
+        var: 
+          value: 0.1
+          learnable: true
+    deep:
+      g0: 
+        mean: 
+          value: 0.0
+          learnable: true
+        var: 
+          value: 0.1
+          learnable: false
+
+  clip_val: 5.0
+  dropout: 0.05
+  max_norm: 200
+  normalize_factors: true
+  deep_freeze: true
+  unfreeze: 1600
+
+model_name: svlae

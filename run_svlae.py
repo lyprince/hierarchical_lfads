@@ -7,8 +7,8 @@ import torch.optim as opt
 
 from trainer import RunManager
 from scheduler import LFADS_Scheduler
-from objective import LFADS_Loss, LogLikelihoodPoisson
-from lfads import LFADS_Net
+from objective import SVLAE_Loss, LogLikelihoodPoisson, LogLikelihoodGaussian
+from svlae import SVLAE_Net
 from utils import read_data, load_parameters
 from plotter import Plotter
 
@@ -40,8 +40,8 @@ def main():
         os.makedirs(save_loc)
     
     data_dict   = read_data(args.data_path)
-    train_data  = torch.Tensor(data_dict['train_data']).to(device)
-    valid_data  = torch.Tensor(data_dict['valid_data']).to(device)
+    train_data  = torch.Tensor(data_dict['train_fluor']).to(device)
+    valid_data  = torch.Tensor(data_dict['valid_fluor']).to(device)
     
     num_trials, num_steps, input_size = train_data.shape
     
@@ -50,34 +50,50 @@ def main():
     train_dl    = torch.utils.data.DataLoader(train_ds, batch_size = args.batch_size, shuffle=True)
     valid_dl    = torch.utils.data.DataLoader(valid_ds, batch_size = valid_data.shape[0])
     
-    loglikelihood = LogLikelihoodPoisson(dt=float(data_dict['dt']))
+    loglikelihood_obs  = LogLikelihoodGaussian()
+    loglikelihood_deep = LogLikelihoodPoisson(dt=float(data_dict['dt']))
     
-    objective = LFADS_Loss(loglikelihood            = loglikelihood,
-                           kl_weight_init           = hyperparams['objective']['kl_weight_init'],
-                           kl_weight_schedule_dur   = hyperparams['objective']['kl_weight_schedule_dur'],
-                           kl_weight_schedule_start = hyperparams['objective']['kl_weight_schedule_start'],
-                           kl_weight_max            = hyperparams['objective']['kl_weight_max'],
+    objective = SVLAE_Loss(loglikelihood_obs        = loglikelihood_obs,
+                           loglikelihood_deep       = loglikelihood_deep,
+                           kl_obs_weight_init           = hyperparams['objective']['kl_obs_weight_init'],
+                           kl_obs_weight_schedule_dur   = hyperparams['objective']['kl_obs_weight_schedule_dur'],
+                           kl_obs_weight_schedule_start = hyperparams['objective']['kl_obs_weight_schedule_start'],
+                           kl_obs_weight_max            = hyperparams['objective']['kl_obs_weight_max'],
+                           kl_deep_weight_init           = hyperparams['objective']['kl_deep_weight_init'],
+                           kl_deep_weight_schedule_dur   = hyperparams['objective']['kl_deep_weight_schedule_dur'],
+                           kl_deep_weight_schedule_start = hyperparams['objective']['kl_deep_weight_schedule_start'],
+                           kl_deep_weight_max            = hyperparams['objective']['kl_deep_weight_max'],
                            l2_weight_init           = hyperparams['objective']['l2_weight_init'],
                            l2_weight_schedule_dur   = hyperparams['objective']['l2_weight_schedule_dur'],
                            l2_weight_schedule_start = hyperparams['objective']['l2_weight_schedule_start'],
                            l2_weight_max            = hyperparams['objective']['l2_weight_max'],
                            l2_con_scale             = hyperparams['objective']['l2_con_scale'],
                            l2_gen_scale             = hyperparams['objective']['l2_gen_scale']).to(device)
-
-    model = LFADS_Net(input_size           = input_size,
-                      factor_size          = hyperparams['model']['factor_size'],
-                      g_encoder_size       = hyperparams['model']['g_encoder_size'],
-                      c_encoder_size       = hyperparams['model']['c_encoder_size'],
-                      g_latent_size        = hyperparams['model']['g_latent_size'],
-                      u_latent_size        = hyperparams['model']['u_latent_size'],
-                      controller_size      = hyperparams['model']['c_controller_size'],
-                      generator_size       = hyperparams['model']['generator_size'],
-                      prior                = hyperparams['model']['prior'],
-                      clip_val             = hyperparams['model']['clip_val'],
-                      dropout              = hyperparams['model']['dropout'],
-                      do_normalize_factors = hyperparams['model']['normalize_factors'],
-                      max_norm             = hyperparams['model']['max_norm'],
-                      device               = device).to(device)
+    
+    hyperparams['model']['obs']['tau']['value']/=data_dict['dt']
+    
+    model = SVLAE_Net(input_size            = input_size,
+                      factor_size           = hyperparams['model']['factor_size'],
+                      g1_encoder_size       = hyperparams['model']['g1_encoder_size'],
+                      c1_encoder_size       = hyperparams['model']['c1_encoder_size'],
+                      g1_latent_size        = hyperparams['model']['g1_latent_size'],
+                      u1_latent_size        = hyperparams['model']['u1_latent_size'],
+                      controller1_size      = hyperparams['model']['c1_controller_size'],
+                      g2_encoder_size       = hyperparams['model']['g2_encoder_size'],
+                      c2_encoder_size       = hyperparams['model']['c2_encoder_size'],
+                      g2_latent_size        = hyperparams['model']['g2_latent_size'],
+                      u2_latent_size        = hyperparams['model']['u2_latent_size'],
+                      controller2_size      = hyperparams['model']['c2_controller_size'],
+                      generator_size        = hyperparams['model']['generator_size'],
+                      prior                 = hyperparams['model']['prior'],
+                      clip_val              = hyperparams['model']['clip_val'],
+                      dropout               = hyperparams['model']['dropout'],
+                      do_normalize_factors  = hyperparams['model']['normalize_factors'],
+                      max_norm              = hyperparams['model']['max_norm'],
+                      deep_freeze           = hyperparams['model']['deep_freeze'],
+                      unfreeze              = hyperparams['model']['unfreeze'],
+                      obs_params            = hyperparams['model']['obs'],
+                      device                = device).to(device)
     
     total_params = 0
     for ix, (name, param) in enumerate(model.named_parameters()):
@@ -86,7 +102,7 @@ def main():
     
     print('Total parameters: %i'%total_params)
 
-    optimizer = opt.Adam(model.parameters(),
+    optimizer = opt.Adam([p for p in model.parameters() if p.requires_grad],
                          lr=hyperparams['optimizer']['lr_init'],
                          betas=hyperparams['optimizer']['betas'],
                          eps=hyperparams['optimizer']['eps'])
@@ -103,9 +119,11 @@ def main():
     
     TIME = torch._np.arange(0, num_steps*data_dict['dt'], data_dict['dt'])
 
-    plotter = {'train' : Plotter(time=TIME, truth={'rates'   : data_dict['train_truth'],
+    plotter = {'train' : Plotter(time=TIME, truth={'rates'   : data_dict['train_rates'],
+                                                   'spikes'  : data_dict['train_spikes'],
                                                    'latent'  : data_dict['train_latent']}),
-               'valid' : Plotter(time=TIME, truth={'rates'   : data_dict['valid_truth'],
+               'valid' : Plotter(time=TIME, truth={'rates'   : data_dict['valid_rates'],
+                                                   'spikes'  : data_dict['valid_spikes'],
                                                    'latent'  : data_dict['valid_latent']})}
     
     if args.use_tensorboard:
