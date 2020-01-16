@@ -93,7 +93,7 @@ class SVLAE_Net(nn.Module):
                                               do_normalize_factors = self.do_normalize_factors,
                                               device   = self.device)
         
-                # Initialize learnable biases
+        # Initialize learnable biases
         self.g_encoder_init  = nn.Parameter(torch.zeros(2, self.g1_encoder_size))
         self.c_encoder_init  = nn.Parameter(torch.zeros(2, self.c1_encoder_size))
         self.controller_init = nn.Parameter(torch.zeros(self.controller1_size))
@@ -276,6 +276,70 @@ class SVLAE_Net(nn.Module):
         self.deep_model.normalize_factors()
         
 
+class Calcium_Net(nn.Module):
+    def __init__(self, input_size,
+                 g_encoder_size=128, c_encoder_size=128,
+                 g_latent_size=64, u_latent_size=64,
+                 controller_size=128, factor_size=4,
+                 parameters = {'gain' : {'value' : 1.0, 'learnable' : False},
+                               'bias' : {'value' : 0.0, 'learnable' : False},
+                               'tau'  : {'value' : 10, 'learnable' : False},
+                               'var' :  {'value' : 0.1, 'learnable' : True}},
+                 prior = {'g0' : {'mean' : {'value': 0.0, 'learnable' : True},
+                                  'var'  : {'value': 0.1, 'learnable' : False}},
+                          'u'  : {'mean' : {'value': 0.0, 'learnable' : True},
+                                  'var'  : {'value': 0.1, 'learnable' : False}}},
+                 clip_val = 5.0, dropout=0.05, device='cpu'):
+        
+        self.input_size      = input_size
+        self.g_encoder_size  = g_encoder_size
+        self.c_encoder_size  = c_encoder_size
+        self.g_latent_size   = g_latent_size
+        self.u_latent_size   = u_latent_size
+        self.controller_size = controller_size
+        self.factor_size     = factor_size
+
+    
+        self.encoder              = LFADS_Encoder(input_size     = self.input_size,
+                                                  g_encoder_size = self.g_encoder_size,
+                                                  c_encoder_size = self.c_encoder_size,
+                                                  g_latent_size  = self.g_latent_size,
+                                                  clip_val       = self.clip_val,
+                                                  dropout        = dropout)
+        
+        self.controller           = LFADS_ControllerCell(input_size      = self.c_encoder_size*2 + self.input_size,
+                                                         controller_size = self.controller_size,
+                                                         u_latent_size   = self.u_latent_size,
+                                                         clip_val        = self.clip_val,
+                                                         dropout         = dropout)
+        
+        self.generator            = Calcium_Generator(input_size  = self.u1_latent_size + self.factor_size,
+                                                      output_size = self.input_size,
+                                                      parameters  = parameters,
+                                                      dropout     = dropout,
+                                                      device      = self.device)
+        
+        # Initialize learnable biases
+        self.g_encoder_init  = nn.Parameter(torch.zeros(2, self.g1_encoder_size))
+        self.c_encoder_init  = nn.Parameter(torch.zeros(2, self.c1_encoder_size))
+        self.controller_init = nn.Parameter(torch.zeros(self.controller1_size))
+        
+        self.g_prior_mean = torch.ones(self.g1_latent_size, device=device) * prior['g0']['mean']['value']
+        if prior['g0']['mean']['learnable']:
+            self.g_prior_mean = nn.Parameter(self.g_prior_mean)
+        self.g_prior_logvar = torch.ones(self.g1_latent_size, device=device) * log(prior['g0']['var']['value'])
+        if prior['g0']['var']['learnable']:
+            self.g_prior_logvar = nn.Parameter(self.g_prior_logvar)
+            
+        self.u_prior_mean = torch.ones(self.u1_latent_size, device=device) * prior['u']['mean']['value']
+        if prior['u']['mean']['learnable']:
+            self.u_prior_mean = nn.Parameter(self.u_prior_mean)
+        self.u_prior_logvar = torch.ones(self.u1_latent_size, device=device) * log(prior['u']['var']['value'])
+        if prior['u']['var']['learnable']:
+            self.u_prior_logvar = nn.Parameter(self.u_prior_logvar)
+        
+        self.initialize_weights()
+        
 class Calcium_Generator(nn.Module):
     def __init__(self, input_size, output_size, parameters, dropout, device='cpu'):
         super(Calcium_Generator, self).__init__()
