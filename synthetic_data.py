@@ -296,8 +296,9 @@ class SyntheticCalciumVideoDataset(torch.utils.data.Dataset):
         self.traces = traces
         
     def __getitem__(self, ix):
-        return (self.traces[ix].unsqueeze(-1).unsqueeze(-1) * self.cells).sum(dim=1).unsqueeze(2)
+        return (self.traces[ix].unsqueeze(-1).unsqueeze(-1) * self.cells).sum(dim=1).unsqueeze(0)
     
     def __len__(self):
-        return traces.__len__()
+        # return traces.__len__()
+        return len(self.traces)
     
