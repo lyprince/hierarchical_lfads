@@ -77,7 +77,7 @@ def main():
                       dropout              = hyperparams['model']['dropout'],
                       do_normalize_factors = hyperparams['model']['normalize_factors'],
                       max_norm             = hyperparams['model']['max_norm'],
-                      device               = device).to(device)
+                      device               = device.to(device))
     
     total_params = 0
     for ix, (name, param) in enumerate(model.named_parameters()):
