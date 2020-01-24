@@ -40,18 +40,13 @@ class SVLAE_Loss(nn.Module):
         l2_weight = self.loss_weights['l2']['weight']
 #         pdb.set_trace()
 
-        recon_obs_loss  = -self.loglikelihood_obs(x_orig.permute(1, 0, 2), x_recon['data'].permute(1, 0, 2), model.obs_model.calcium_generator.logvar)
+        recon_obs_loss  = -self.loglikelihood_obs(x_orig.permute(1, 0, 2), x_recon['data'].permute(1, 0, 2), model.obs_model.generator.calcium_generator.logvar)
         recon_deep_loss = -self.loglikelihood_deep(x_recon['spikes'].permute(1, 0, 2), x_recon['rates'].permute(1, 0, 2))
 
-        kl_obs_loss = kl_obs_weight * kldiv_gaussian_gaussian(post_mu  = model.g_posterior_mean,
-                                                              post_lv  = model.g_posterior_logvar,
-                                                              prior_mu = model.g_prior_mean,
-                                                              prior_lv = model.g_prior_logvar)
-
-        kl_obs_loss += kl_obs_weight * kldiv_gaussian_gaussian(post_mu  = model.u_posterior_mean,
-                                                               post_lv  = model.u_posterior_logvar,
-                                                               prior_mu = model.u_prior_mean,
-                                                               prior_lv = model.u_prior_logvar)
+        kl_obs_loss = kl_obs_weight * kldiv_gaussian_gaussian(post_mu   = model.obs_model.u_posterior_mean,
+                                                               post_lv  = model.obs_model.u_posterior_logvar,
+                                                               prior_mu = model.obs_model.u_prior_mean,
+                                                               prior_lv = model.obs_model.u_prior_logvar)
 
         kl_deep_loss = kl_deep_weight * kldiv_gaussian_gaussian(post_mu  = model.deep_model.g_posterior_mean,
                                                                 post_lv  = model.deep_model.g_posterior_logvar,
@@ -61,14 +56,22 @@ class SVLAE_Loss(nn.Module):
         l2_loss = 0.5 * l2_weight * self.l2_gen_scale * model.deep_model.generator.gru_generator.hidden_weight_l2_norm()
 
         if hasattr(model.deep_model, 'controller'):
-            kl_deep_loss += kl_deep_weight * kldiv_gaussian_gaussian(post_mu= model.deep_model.u_posterior_mean,
+            kl_deep_loss += kl_deep_weight * kldiv_gaussian_gaussian(post_mu  = model.deep_model.u_posterior_mean,
                                                                      post_lv  = model.deep_model.u_posterior_logvar,
                                                                      prior_mu = model.deep_model.u_prior_mean,
                                                                      prior_lv = model.deep_model.u_prior_logvar)
 
             l2_loss += 0.5 * l2_weight * self.l2_con_scale * model.deep_model.controller.gru_controller.hidden_weight_l2_norm()
+            
+        loss = recon_obs_loss + recon_deep_loss +  kl_obs_loss + kl_deep_loss + l2_loss
+        loss_dict = {'recon_obs'  : float(recon_obs_loss.data),
+                     'recon_deep' : float(recon_deep_loss.data),
+                     'kl_obs'     : float(kl_obs_loss.data),
+                     'kl_deep'    : float(kl_deep_loss.data),
+                     'l2'         : float(l2_loss.data),
+                     'total'      : float(loss.data)}
 
-        return recon_obs_loss + recon_deep_loss, kl_obs_loss + kl_deep_loss, l2_loss
+        return loss, loss_dict
     
     #------------------------------------------------------------------------------
     #------------------------------------------------------------------------------
@@ -141,7 +144,13 @@ class LFADS_Loss(nn.Module):
             
             l2_loss += 0.5 * l2_weight * self.l2_con_scale * model.controller.gru_controller.hidden_weight_l2_norm()
             
-        return recon_loss, kl_loss, l2_loss
+        loss = recon_loss +  kl_loss + l2_loss
+        loss_dict = {'recon' : float(recon_loss.data),
+                     'kl'    : float(kl_loss.data),
+                     'l2'    : float(l2_loss.data),
+                     'total' : float(loss.data)}
+
+        return loss, loss_dict
     
     #------------------------------------------------------------------------------
     #------------------------------------------------------------------------------
@@ -176,6 +185,15 @@ class LogLikelihoodPoisson(nn.Module):
     def forward(self, k, lam):
 #         pdb.set_trace()
         return loglikelihood_poisson(k, lam*self.dt)
+
+class LogLikelihoodPoissonSimplePlusL1(nn.Module):
+    
+    def __init__(self, dt=1.0, device='cpu'):
+        super(LogLikelihoodPoissonSimplePlusL1, self).__init__()
+        self.dt = dt
+    
+    def forward(self, k, lam):
+        return loglikelihood_poissonsimple_plusl1(k, lam*self.dt)
     
 def loglikelihood_poisson(k, lam):
     '''
@@ -188,6 +206,9 @@ def loglikelihood_poisson(k, lam):
         - lam (torch.Tensor): Tensor of size batch-size x time-step x input dimensions
     '''
     return (k * torch.log(lam) - lam - torch.lgamma(k + 1)).mean(dim=0).sum()
+
+def loglikelihood_poissonsimple_plusl1(k, lam):
+    return (k * torch.log(lam) - lam - torch.abs(k)).mean(dim=0).sum()
 
 class LogLikelihoodGaussian(nn.Module):
     def __init__(self):

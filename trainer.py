@@ -4,11 +4,14 @@ import torchvision
 import time
 import os
 import pdb
+import functools, collections, operator
+
 
 class RunManager():
     def __init__(self, model, objective, optimizer, scheduler,
-                 train_dl, valid_dl, plotter=None, writer=None, max_epochs=1000,
-                 save_loc = '/tmp/', load_checkpoint=False, do_health_check=False):
+                 train_dl, valid_dl, transforms,
+                 plotter=None, writer=None, do_health_check=False,
+                 max_epochs=1000, save_loc = '/tmp/', load_checkpoint=False):
     
         self.device     = 'cuda' if torch.cuda.is_available() else 'cpu';
         self.model      = model
@@ -17,6 +20,7 @@ class RunManager():
         self.scheduler  = scheduler
         self.train_dl   = train_dl
         self.valid_dl   = valid_dl
+        self.transforms = transforms
         self.writer     = writer
         self.plotter    = plotter
             
@@ -28,46 +32,40 @@ class RunManager():
         self.step  = 0
         self.best  = float('inf')
         
-        self.loss_dict = {'train' : {'total' : [],
-                                      'recon' : [],
-                                      'kl'    : []},
-                          'valid' : {'total' : [],
-                                      'recon' : [],
-                                      'kl'    : []},
+        self.loss_dict = {'train' : {},
+                          'valid' : {},
                           'l2' : []}
         
         if load_checkpoint:
             self.load_checkpoint('recent')
             
     def run(self):
+        if self.writer is not None:
+            if self.plotter is not None:
+                    self.plot_to_tensorboard()
+                    
         for epoch in range(self.epoch, self.max_epochs):
             if self.optimizer.param_groups[0]['lr'] < self.scheduler.min_lrs[0]:
                 break
             self.epoch = epoch + 1
             tic = time.time()
-            train_loss = 0
-            train_recon_loss = 0
-            train_kl_loss = 0
-            epoch_l2_loss = 0
+            loss_dict_list = []
+            
             self.model.train()
             for i,x in enumerate(self.train_dl):
                 x = x[0].permute(1, 0, 2)
                 self.optimizer.zero_grad()
-                recon, latent = self.model(x)
-                recon_loss, kl_loss, l2_loss = self.objective(x_orig= x,
-                                                              x_recon= recon,
-                                                              model= self.model)
+                recon, latent = self.model(self.transforms(x))
+                loss, loss_dict = self.objective(x_orig= x,
+                                                 x_recon= recon,
+                                                 model= self.model)
                 
-                loss = recon_loss + kl_loss + l2_loss
-                train_loss += float(loss.data)
-                train_recon_loss += float(recon_loss.data)
-                train_kl_loss += float(kl_loss.data)
-                epoch_l2_loss += float(l2_loss.data)
-#                 print('Loss = %.3f'%float(loss.data))
+                loss_dict_list.append(loss_dict)
+                
+
                 bw_tic = time.time()
                 loss.backward()
                 bw_toc = time.time()
-#                 print('Backward took %.3f ms'%(1000*(bw_toc - bw_tic)))
                
                 # Clip gradient norm
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.model.max_norm)
@@ -85,42 +83,45 @@ class RunManager():
                     self.optimizer, self.scheduler = self.model.unfreeze_parameters(self.step, self.optimizer, self.scheduler)
                     
                 self.step += 1
+              
+            loss_dict = {} 
+            for d in loss_dict_list: 
+                for k in d.keys(): 
+                    loss_dict[k] = loss_dict.get(k, 0) + d[k]/len(loss_dict_list)
+            for key, val in loss_dict.items():
+                if key in self.loss_dict['train'].keys():
+                    self.loss_dict['train'][key].append(loss_dict[key])
+                elif key == 'l2':
+                    self.loss_dict[key].append(loss_dict[key])
+                else:
+                    self.loss_dict['train'][key] = [loss_dict[key]]
             
-            train_loss /= (i + 1)
-            train_recon_loss /= (i + 1)
-            train_kl_loss /= (i + 1)
-            epoch_l2_loss /= (i + 1)
-            
-            self.loss_dict['train']['total'].append(train_loss)
-            self.loss_dict['train']['recon'].append(train_recon_loss)
-            self.loss_dict['train']['kl'].append(train_kl_loss)
-            self.loss_dict['l2'].append(epoch_l2_loss)
-            
-            self.scheduler.step(train_loss)
-            
+            self.scheduler.step(self.loss_dict['train']['total'][-1])
 
-            valid_loss = 0
-            valid_recon_loss = 0
-            valid_kl_loss = 0
+
+            loss_dict_list = []
             self.model.eval()
             for i, x in enumerate(self.valid_dl):
                 with torch.no_grad():
                     x = x[0].permute(1, 0, 2)
-                    recon, latent = self.model(x)
-                    recon_loss, kl_loss, l2_loss = self.objective(x_orig= x, x_recon= recon, model= self.model)
+                    recon, latent = self.model(self.transforms(x))
+                    loss, loss_dict = self.objective(x_orig= x, x_recon= recon, model= self.model)
+                    loss_dict_list.append(loss_dict)
                     
-                    loss = recon_loss + kl_loss + l2_loss
-                    valid_loss += float(loss.data)
-                    valid_recon_loss += float(recon_loss.data)
-                    valid_kl_loss += float(kl_loss.data)
+            loss_dict = {} 
+            for d in loss_dict_list: 
+                for k in d.keys(): 
+                    loss_dict[k] = loss_dict.get(k, 0) + d[k]/len(loss_dict_list)
+
+            for key, val in loss_dict.items():
+                if key in self.loss_dict['valid'].keys():
+                    self.loss_dict['valid'][key].append(loss_dict[key])
+                elif key == 'l2':
+                    pass
+                else:
+                    self.loss_dict['valid'][key] = [loss_dict[key]]
                     
-                    
-            valid_loss /= (i + 1)
-            valid_recon_loss /= (i+1)
-            valid_kl_loss /= (i+1)
-            self.loss_dict['valid']['total'].append(valid_loss)
-            self.loss_dict['valid']['recon'].append(valid_recon_loss)
-            self.loss_dict['valid']['kl'].append(valid_kl_loss)
+            valid_loss = self.loss_dict['valid']['total'][-1]
             if valid_loss < self.best:
                 self.best = valid_loss
                 self.save_checkpoint('best')
@@ -137,9 +138,16 @@ class RunManager():
             
             
             toc = time.time()
-            print('Epoch %5d, Epoch time = %.3f s, Loss (train, valid): Total (%.3f, %.3f), Recon (%.2f, %.2f), KL (%.2f, %.2f), L2 (%.2f)'%(self.epoch, toc - tic, train_loss, valid_loss, train_recon_loss, valid_recon_loss, train_kl_loss, valid_kl_loss, epoch_l2_loss))
-        
-#         self.writer.add_graph(self.model, x)
+            
+            results_string = 'Epoch %5d, Epoch time = %.3f s, Loss (train, valid): '%(self.epoch, toc - tic)
+            for key in self.loss_dict['train'].keys():
+                train_loss = self.loss_dict['train'][key][self.epoch-1]
+                valid_loss = self.loss_dict['valid'][key][self.epoch-1]
+                results_string+= ' %s (%.2f, %.2f),'%(key, train_loss, valid_loss)
+            
+            results_string+= ' %s (%.2f)'%('l2', self.loss_dict['l2'][self.epoch-1])
+            
+            print(results_string, flush=True)
             
     def write_to_tensorboard(self):
         
@@ -151,7 +159,6 @@ class RunManager():
             
             self.writer.add_scalars('1_Loss/%i_%s'%(ix+1, key), {'Training' : float(train_loss),
                                                                  'Validation' : float(valid_loss)}, self.epoch)
-            
         l2_loss = self.loss_dict['l2'][self.epoch-1]
         self.writer.add_scalar('1_Loss/4_L2_loss', float(l2_loss), self.epoch)
 
@@ -169,33 +176,17 @@ class RunManager():
         figs_dict_valid = self.plotter['valid'].plot_summary(model = self.model,
                                                     data  = self.valid_dl.dataset.tensors[0])
         
-        self.writer.add_figure('Examples/1_Train', figs_dict_train['traces'], self.epoch, close=True)
-        if 'inputs' in figs_dict_train.keys():
-            self.writer.add_figure('Inputs/1_Train', figs_dict_train['inputs'], self.epoch, close=True)
+        fig_names = ['traces', 'inputs', 'factors', 'rates', 'spikes']
+        for fn in fig_names:
+            if fn in figs_dict_train.keys():
+                self.writer.add_figure('%s/train'%(fn), figs_dict_train[fn], self.epoch, close=True)
+            elif 'truth_%s'%fn in figs_dict_train.keys():
+                self.writer.add_figure('%s/train'%(fn), figs_dict_train['truth_%s'%fn], self.epoch, close=True)
 
-        self.writer.add_figure('Examples/2_Valid', figs_dict_valid['traces'], self.epoch, close=True)
-        if 'inputs' in figs_dict_valid.keys():
-            self.writer.add_figure('Inputs/2_Valid', figs_dict_valid['inputs'], self.epoch, close=True)
-
-        if 'truth_factors' in figs_dict_train.keys():
-            self.writer.add_figure('Ground_truth/1_Train/1_Factors', figs_dict_train['truth_factors'], self.epoch, close=True)
-        else:
-            self.writer.add_figure('Factors/1_Train', figs_dict_train['factors'], self.epoch, close=True)
-
-        if 'truth_rates' in figs_dict_train.keys():
-            self.writer.add_figure('Ground_truth/1_Train/2_Rates', figs_dict_train['truth_rates'], self.epoch, close=True)
-        else:
-            self.writer.add_figure('Rates/1_Train', figs_dict_train['rates'], self.epoch, close=True)
-
-        if 'truth_factors' in figs_dict_valid.keys():
-            self.writer.add_figure('Ground_truth/2_Valid/1_Factors', figs_dict_valid['truth_factors'], self.epoch, close=True)
-        else:
-            self.writer.add_figure('Factors/2_Valid', figs_dict_valid['factors'], self.epoch, close=True)
-
-        if 'truth_rates' in figs_dict_valid.keys():
-            self.writer.add_figure('Ground_truth/2_Valid/2_Rates', figs_dict_valid['truth_rates'], self.epoch, close=True)
-        else:
-            self.writer.add_figure('Rates/2_Valid', figs_dict_valid['rates'], self.epoch, close = True)
+            if fn in figs_dict_valid.keys():
+                self.writer.add_figure('%s/valid'%(fn), figs_dict_valid[fn], self.epoch, close=True)
+            elif 'truth_%s'%fn in figs_dict_valid.keys():
+                self.writer.add_figure('%s/valid'%(fn), figs_dict_valid['truth_%s'%fn], self.epoch, close=True)
             
     #------------------------------------------------------------------------------
     #------------------------------------------------------------------------------
@@ -210,6 +201,9 @@ class RunManager():
                 self.writer.add_scalar('3_Gradient_norms/%i_%s'%(ix, name), param.grad.data.norm(), self.epoch)
             else:
                 self.writer.add_scalar('3_Gradient_norms/%i_%s'%(ix, name), 0.0, self.epoch)
+                
+            if 'weight' in name:
+                self.writer.add_scalar('4_Weight_norms/%i_%s'%(ix, name), param.data.norm(), self.epoch)
         
     def save_checkpoint(self, output_filename='recent'):
                 # Create dictionary of training variables
@@ -233,6 +227,8 @@ class RunManager():
         if os.path.exists(self.save_loc + 'checkpoints/' + input_filename + '.pth'):
             state_dict = torch.load(self.save_loc + 'checkpoints/' + input_filename + '.pth')
             self.model.load_state_dict(state_dict['net'])
+            if len(state_dict['opt']['param_groups']) > 1:
+                self.optimizer, self.scheduler = self.model.unfreeze_parameters(state_dict['run_manager']['step'], self.optimizer, self.scheduler)
             self.optimizer.load_state_dict(state_dict['opt'])
             self.scheduler.load_state_dict(state_dict['sched'])
 

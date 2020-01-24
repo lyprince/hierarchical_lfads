@@ -138,13 +138,13 @@ class LFADS_GenGRUCell(nn.Module):
             c_x = 0
         
         # Calculate candidate hidden state from hadamard product of hidden state and reset gate
-        c_rh = self.fc_rh_c(h)
+        c_rh = self.fc_rh_c(r * h)
         
         # Combine candidate hidden state vectors
         c = torch.tanh(c_x + c_rh)
         
         # Return new hidden state as a function of update gate, current hidden state, and candidate hidden state
-        return torch.mul(u, h) + torch.mul(1 - u, c)
+        return u * h + (1 - u) * c
     
     def hidden_weight_l2_norm(self):
         return self.fc_h_ru.weight.norm(2).pow(2)/self.fc_h_ru.weight.numel() + self.fc_rh_c.weight.norm(2).pow(2)/self.fc_rh_c.weight.numel()

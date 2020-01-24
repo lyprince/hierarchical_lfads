@@ -32,16 +32,14 @@ objective:
 
 model:
   factor_size: 3
-  g1_encoder_size: 128
-  c1_encoder_size: 128
-  g1_latent_size: 100
-  u1_latent_size: 100
-  c1_controller_size: 128
-  g2_encoder_size: 64
-  c2_encoder_size: 0
-  g2_latent_size: 64
-  u2_latent_size: 0
-  c2_controller_size: 0
+  obs_encoder_size: 128
+  obs_latent_size: 100
+  obs_controller_size: 128
+  deep_g_encoder_size: 64
+  deep_c_encoder_size: 0
+  deep_g_latent_size: 64
+  deep_u_latent_size: 0
+  deep_c_controller_size: 0
   generator_size: 64
   
   obs:
@@ -60,13 +58,6 @@ model:
   
   prior:
     obs:
-      g0: 
-        mean: 
-          value: 0.0
-          learnable: true
-        var: 
-          value: 0.1
-          learnable: false
       u: 
         mean: 
           value: 0.0
@@ -84,9 +75,11 @@ model:
           learnable: false
 
   clip_val: 5.0
+  generator_burn: 0
   dropout: 0.05
   max_norm: 200
   normalize_factors: true
+  factor_bias: false
   deep_freeze: true
   unfreeze: 1600
 

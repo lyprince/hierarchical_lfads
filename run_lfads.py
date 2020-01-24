@@ -3,6 +3,7 @@ import os
 
 import torch
 import torchvision
+import torchvision.transforms as trf
 import torch.optim as opt
 
 from trainer import RunManager
@@ -33,7 +34,7 @@ def main():
     model_name = hyperparams['model_name']
     mhp_list = [key.replace('size', '').replace('_', '')[:4] + str(val) for key, val in hyperparams['model'].items() if 'size' in key]
     mhp_list.sort()
-    hyperparams['run_name'] = '_'.join(mhp_list)
+    hyperparams['run_name'] = '_'.join(mhp_list) + '_retest'
     save_loc = '%s/%s/%s/%s/'%(args.output_dir, data_name, model_name, hyperparams['run_name'])
     
     if not os.path.exists(save_loc):
@@ -49,6 +50,8 @@ def main():
     valid_ds    = torch.utils.data.TensorDataset(valid_data)
     train_dl    = torch.utils.data.DataLoader(train_ds, batch_size = args.batch_size, shuffle=True)
     valid_dl    = torch.utils.data.DataLoader(valid_ds, batch_size = valid_data.shape[0])
+    
+    transforms  = trf.Compose([])
     
     loglikelihood = LogLikelihoodPoisson(dt=float(data_dict['dt']))
     
@@ -134,6 +137,7 @@ def main():
                              scheduler  = scheduler,
                              train_dl   = train_dl,
                              valid_dl   = valid_dl,
+                             transforms = transforms,
                              writer     = writer,
                              plotter    = rm_plotter,
                              max_epochs = args.max_epochs,

@@ -50,7 +50,7 @@ class LFADS_Net(nn.Module):
                                   'var'  : {'value': 0.1, 'learnable' : True},
                                   'tau'  : {'value': 10,  'learnable' : True}}},
                  clip_val=5.0, dropout=0.0, max_norm = 200, deep_freeze = False,
-                 do_normalize_factors=True, device='cpu'):
+                 do_normalize_factors=True, factor_bias = False, device='cpu'):
         
         super(LFADS_Net, self).__init__()
         
@@ -67,6 +67,7 @@ class LFADS_Net(nn.Module):
         self.clip_val             = clip_val
         self.max_norm             = max_norm
         self.do_normalize_factors = do_normalize_factors
+        self.factor_bias          = factor_bias
         self.device               = device
         self.deep_freeze          = deep_freeze
         
@@ -93,6 +94,7 @@ class LFADS_Net(nn.Module):
                                                generator_size = self.generator_size,
                                                factor_size    = self.factor_size,
                                                clip_val       = self.clip_val,
+                                               factor_bias    = self.factor_bias,
                                                dropout        = dropout)
         
         # Initialize dense layers
@@ -101,7 +103,7 @@ class LFADS_Net(nn.Module):
         else:
             self.fc_genstate = nn.Linear(in_features= self.g_latent_size, out_features= self.generator_size)
         
-        self.fc_rates    = nn.Linear(in_features= self.factor_size, out_features= self.output_size)
+        self.fc_logrates    = nn.Linear(in_features= self.factor_size, out_features= self.output_size)
         
         # Initialize learnable biases
         self.g_encoder_init  = nn.Parameter(torch.zeros(2, self.g_encoder_size))
@@ -120,7 +122,7 @@ class LFADS_Net(nn.Module):
             
         if self.c_encoder_size > 0 and self.controller_size > 0 and self.u_latent_size > 0:
             self.u_prior_gp_mean = torch.ones(self.u_latent_size, device=device) * prior['u']['mean']['value']
-            if prior['g0']['mean']['learnable']:
+            if prior['u']['mean']['learnable']:
                 self.u_prior_gp_mean = nn.Parameter(self.u_prior_gp_mean)
             self.u_prior_gp_logvar = torch.ones(self.u_latent_size, device=device) * log(prior['u']['var']['value'])
             if prior['u']['var']['learnable']:
@@ -195,7 +197,7 @@ class LFADS_Net(nn.Module):
             self.u_prior_mean, self.u_prior_logvar = self._gp_to_normal(self.u_prior_gp_mean, self.u_prior_gp_logvar, self.u_prior_gp_logtau, gen_inputs)
         
         # Create reconstruction dictionary
-        recon = {'rates' : self.fc_rates(factors).exp()}
+        recon = {'rates' : self.fc_logrates(factors).exp()}
         recon['data'] = recon['rates'].clone()
         return recon, (factors, gen_inputs)
     
@@ -352,7 +354,7 @@ class LFADS_ControllerCell(nn.Module):
     
 class LFADS_GeneratorCell(nn.Module):
     
-    def __init__(self, input_size, generator_size, factor_size, dropout = 0.0, clip_val = 5.0):
+    def __init__(self, input_size, generator_size, factor_size, dropout = 0.0, clip_val = 5.0, factor_bias = False):
         super(LFADS_GeneratorCell, self).__init__()
         self.input_size = input_size
         self.generator_size = generator_size
@@ -362,7 +364,7 @@ class LFADS_GeneratorCell(nn.Module):
         self.clip_val = clip_val
         
         self.gru_generator = LFADS_GenGRUCell(input_size=input_size, hidden_size=generator_size)
-        self.fc_factors = nn.Linear(in_features=generator_size, out_features=factor_size, bias=False)
+        self.fc_factors = nn.Linear(in_features=generator_size, out_features=factor_size, bias=factor_bias)
         
     def forward(self, input, hidden):
         

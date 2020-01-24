@@ -4,10 +4,11 @@ import os
 import torch
 import torchvision
 import torch.optim as opt
+import torchvision.transforms as trf
 
 from trainer import RunManager
 from scheduler import LFADS_Scheduler
-from objective import SVLAE_Loss, LogLikelihoodPoisson, LogLikelihoodGaussian
+from objective import SVLAE_Loss, LogLikelihoodPoisson, LogLikelihoodPoissonSimplePlusL1, LogLikelihoodGaussian
 from svlae import SVLAE_Net
 from utils import read_data, load_parameters
 from plotter import Plotter
@@ -50,8 +51,11 @@ def main():
     train_dl    = torch.utils.data.DataLoader(train_ds, batch_size = args.batch_size, shuffle=True)
     valid_dl    = torch.utils.data.DataLoader(valid_ds, batch_size = valid_data.shape[0])
     
+#     transforms = trf.Compose([trf.Normalize(mean=(train_data.mean(),), std=(train_data.std(),))])
+    transforms = trf.Compose([])
+    
     loglikelihood_obs  = LogLikelihoodGaussian()
-    loglikelihood_deep = LogLikelihoodPoisson(dt=float(data_dict['dt']))
+    loglikelihood_deep = LogLikelihoodPoissonSimplePlusL1(dt=float(data_dict['dt']))
     
     objective = SVLAE_Loss(loglikelihood_obs        = loglikelihood_obs,
                            loglikelihood_deep       = loglikelihood_deep,
@@ -74,21 +78,21 @@ def main():
     
     model = SVLAE_Net(input_size            = input_size,
                       factor_size           = hyperparams['model']['factor_size'],
-                      g1_encoder_size       = hyperparams['model']['g1_encoder_size'],
-                      c1_encoder_size       = hyperparams['model']['c1_encoder_size'],
-                      g1_latent_size        = hyperparams['model']['g1_latent_size'],
-                      u1_latent_size        = hyperparams['model']['u1_latent_size'],
-                      controller1_size      = hyperparams['model']['c1_controller_size'],
-                      g2_encoder_size       = hyperparams['model']['g2_encoder_size'],
-                      c2_encoder_size       = hyperparams['model']['c2_encoder_size'],
-                      g2_latent_size        = hyperparams['model']['g2_latent_size'],
-                      u2_latent_size        = hyperparams['model']['u2_latent_size'],
-                      controller2_size      = hyperparams['model']['c2_controller_size'],
+                      obs_encoder_size      = hyperparams['model']['obs_encoder_size'],
+                      obs_latent_size       = hyperparams['model']['obs_latent_size'],
+                      obs_controller_size   = hyperparams['model']['obs_controller_size'],
+                      deep_encoder_size     = hyperparams['model']['deep_encoder_size'],
+                      deep_encoder_size     = hyperparams['model']['deep_encoder_size'],
+                      deep_latent_size      = hyperparams['model']['deep_latent_size'],
+                      deep_latent_size      = hyperparams['model']['deep_latent_size'],
+                      deep_controller_size  = hyperparams['model']['deep_controller_size'],
                       generator_size        = hyperparams['model']['generator_size'],
                       prior                 = hyperparams['model']['prior'],
                       clip_val              = hyperparams['model']['clip_val'],
+                      generator_burn        = hyperparams['model']['generator_burn'],
                       dropout               = hyperparams['model']['dropout'],
                       do_normalize_factors  = hyperparams['model']['normalize_factors'],
+                      factor_bias           = hyperparams['model']['factor_bias'],
                       max_norm              = hyperparams['model']['max_norm'],
                       deep_freeze           = hyperparams['model']['deep_freeze'],
                       unfreeze              = hyperparams['model']['unfreeze'],
@@ -152,6 +156,7 @@ def main():
                              scheduler  = scheduler,
                              train_dl   = train_dl,
                              valid_dl   = valid_dl,
+                             transforms = transforms,
                              writer     = writer,
                              plotter    = rm_plotter,
                              max_epochs = args.max_epochs,
