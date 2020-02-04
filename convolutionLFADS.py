@@ -308,7 +308,7 @@ def train_convVAE(train_loader,test_loader,n_epochs): #model,
 
 if __name__=="__main__":
     train_data, train_loader, test_loader = get_data()
-    train_convVAE(train_loader,test_loader,50)
+    train_convVAE(train_loader,test_loader,300)
 
 
 # In[2]:
