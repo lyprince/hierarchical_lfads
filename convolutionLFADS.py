@@ -1,24 +1,28 @@
 #!/usr/bin/env python
 # coding: utf-8
 
-# In[1]:
 
-
-# to do:
-
-# 2- play with hyper-parameters, and loss
-# 3- check on test error
-
+import os
+import sys
+import numpy as np
+import argparse
+from tensorboardX import SummaryWriter
 
 import torch
 import torch.nn as nn
-import numpy as np
 from torchvision import datasets
 import torchvision.transforms as transforms
 from torch.autograd import Variable
+
 from lfads import LFADS_Net
 from objective import *
 from scheduler import LFADS_Scheduler
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--save_loc', default='./', type=str)
+
+global args; args = parser.parse_args()
 
 
 class conv_block(nn.Module):# *args, **kwargs 
@@ -250,7 +254,9 @@ def train_convVAE(train_loader,test_loader,n_epochs): #model,
 #                                 min_lr         =  0,
 #                                 eps            =  1e-8)
     
-
+    writer_val = SummaryWriter(logdir=os.path.join(args.save_loc, 'log\val'))
+    writer_train = SummaryWriter(logdir=os.path.join(args.save_loc, 'log\train'))
+    
     for epoch in range(1, n_epochs+1):
         # monitor training loss
         train_loss = 0.0
@@ -279,6 +285,8 @@ def train_convVAE(train_loader,test_loader,n_epochs): #model,
             # update running training loss
             train_loss += loss.item()*videos.size(0)
             i += 1
+            
+            writer_train.add_scalar('total/loss', train_loss, epoch)
          
         test_loss = 0.0
         for data_test in test_loader:
@@ -297,6 +305,8 @@ def train_convVAE(train_loader,test_loader,n_epochs): #model,
             test_loss += loss_test.item()*videos.size(0)
             i += 1
             
+            writer_val.add_scalar('total/loss', test_loss, epoch)
+            
 #             scheduler.step(loss)
             
         # print avg training statistics 
@@ -308,41 +318,5 @@ def train_convVAE(train_loader,test_loader,n_epochs): #model,
 
 if __name__=="__main__":
     train_data, train_loader, test_loader = get_data()
-    train_convVAE(train_loader,test_loader,300)
-
-
-# In[2]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
-
-
-# In[ ]:
-
-
-
+    train_convVAE(train_loader,test_loader,10)
 
