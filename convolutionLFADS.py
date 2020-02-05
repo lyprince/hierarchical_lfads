@@ -313,7 +313,7 @@ def train_convVAE(train_loader,test_loader,n_epochs): #model,
 #             scheduler.step(loss)
             
         # print avg training statistics  
-        torch.save(model, os.path.join(args.save_loc, 'model/entire_model.pth')
+        torch.save(model, os.path.join(args.save_loc, 'model/entire_model.pth'))
         train_loss = train_loss/len(train_loader)
         test_loss = test_loss/len(test_loader)
         print(len(train_loader))
