@@ -6,6 +6,7 @@ import os
 import sys
 import numpy as np
 import argparse
+import time
 from tensorboardX import SummaryWriter
 
 import torch
@@ -23,7 +24,8 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--save_loc', default='./', type=str)
 
 global args; args = parser.parse_args()
-
+os.environ["CUDA_VISIBLE_DEVICES"] = '0,1'
+torch.backends.cudnn.benchmark = True
 
 class conv_block(nn.Module):# *args, **kwargs 
     def __init__(self, in_f, out_f):
@@ -173,7 +175,7 @@ def get_data():
     
     num_workers = 0
     # how many samples per batch to load
-    batch_size = 20
+    batch_size = 65
 
     # prepare data loaders
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, num_workers=num_workers)
@@ -254,11 +256,13 @@ def train_convVAE(train_loader,test_loader,n_epochs): #model,
 #                                 min_lr         =  0,
 #                                 eps            =  1e-8)
     
-    writer_val = SummaryWriter(logdir=os.path.join(args.save_loc, 'log\val'))
-    writer_train = SummaryWriter(logdir=os.path.join(args.save_loc, 'log\train'))
+    writer_val = SummaryWriter(logdir=os.path.join(args.save_loc, 'log/val'))
+    writer_train = SummaryWriter(logdir=os.path.join(args.save_loc, 'log/train'))
     
     for epoch in range(1, n_epochs+1):
         # monitor training loss
+        bw_tic = time.time()
+        
         train_loss = 0.0
 
         ###################
@@ -267,7 +271,6 @@ def train_convVAE(train_loader,test_loader,n_epochs): #model,
         i = 0
         for data in train_loader:
             
-#             print(i)
             # _ stands in for labels, here
             # no need to flatten images
             videos = data.to(device)
@@ -309,14 +312,16 @@ def train_convVAE(train_loader,test_loader,n_epochs): #model,
             
 #             scheduler.step(loss)
             
-        # print avg training statistics 
+        # print avg training statistics  
+        torch.save(model, os.path.join(args.save_loc, 'model/entire_model.pth')
         train_loss = train_loss/len(train_loader)
         test_loss = test_loss/len(test_loader)
-        
-        print('Epoch: {} \tTotal Loss: {:.6f} \tl2 Loss: {:.6f} \tkl Loss: {:.6f} \tTest Loss {:.6f}'.format(
-            epoch, train_loss, l2_loss, kl_loss, test_loss))
+        print(len(train_loader))
+        bw_toc = time.time()
+        print('Epoch: {} \tTotal Loss: {:.6f} \tl2 Loss: {:.6f} \tkl Loss: {:.6f} \tTest Loss {:.6f} \tTime {:.3f} s'.format(
+            epoch, train_loss, l2_loss, kl_loss, test_loss, (bw_toc - bw_tic)))
 
 if __name__=="__main__":
     train_data, train_loader, test_loader = get_data()
-    train_convVAE(train_loader,test_loader,10)
+    train_convVAE(train_loader,test_loader,500)
 
