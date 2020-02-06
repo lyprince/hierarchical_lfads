@@ -22,6 +22,7 @@ from scheduler import LFADS_Scheduler
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--save_loc', default='./', type=str)
+parser.add_argument('--num_epochs', default=500, type=int)
 
 global args; args = parser.parse_args()
 os.environ["CUDA_VISIBLE_DEVICES"] = '0,1'
@@ -82,14 +83,14 @@ class convVAE(nn.Module):
         device     = 'cuda' if torch.cuda.is_available() else 'cpu';
         
         in_f = 1
-        out_f = [10,20]#[1,1]#
+        out_f = [10,20,40]#[1,1]#
         all_f = [in_f,*out_f]
-        self.n_layers = 2
+        self.n_layers = 3
         
         self.video_dim_space = 128
         self.video_dim_time = 10
-        self.final_size = 32#32
-        self.final_f = 20#20#3
+        self.final_size = 16#32
+        self.final_f = 40#20#3
         
         self.convlayers = nn.ModuleList()
         for n in range(0,self.n_layers):
@@ -313,15 +314,17 @@ def train_convVAE(train_loader,test_loader,n_epochs): #model,
 #             scheduler.step(loss)
             
         # print avg training statistics  
-        torch.save(model, os.path.join(args.save_loc, 'model/entire_model.pth'))
         train_loss = train_loss/len(train_loader)
         test_loss = test_loss/len(test_loader)
         print(len(train_loader))
         bw_toc = time.time()
         print('Epoch: {} \tTotal Loss: {:.6f} \tl2 Loss: {:.6f} \tkl Loss: {:.6f} \tTest Loss {:.6f} \tTime {:.3f} s'.format(
             epoch, train_loss, l2_loss, kl_loss, test_loss, (bw_toc - bw_tic)))
+        
+    #save the trained model
+    torch.save(model, os.path.join(args.save_loc, 'entire_model.pth'))
 
 if __name__=="__main__":
     train_data, train_loader, test_loader = get_data()
-    train_convVAE(train_loader,test_loader,500)
+    train_convVAE(train_loader,test_loader,args.num_epochs)
 
