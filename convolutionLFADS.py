@@ -20,11 +20,11 @@ from objective import *
 from scheduler import LFADS_Scheduler
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--save_loc', default='./', type=str)
-parser.add_argument('--num_epochs', default=500, type=int)
+# parser = argparse.ArgumentParser()
+# parser.add_argument('--save_loc', default='./', type=str)
+# parser.add_argument('--num_epochs', default=500, type=int)
 
-global args; args = parser.parse_args()
+# global args; args = parser.parse_args()
 os.environ["CUDA_VISIBLE_DEVICES"] = '0,1'
 torch.backends.cudnn.benchmark = True
 
@@ -257,8 +257,8 @@ def train_convVAE(train_loader,test_loader,n_epochs): #model,
 #                                 min_lr         =  0,
 #                                 eps            =  1e-8)
     
-    writer_val = SummaryWriter(logdir=os.path.join(args.save_loc, 'log/val'))
-    writer_train = SummaryWriter(logdir=os.path.join(args.save_loc, 'log/train'))
+    writer_val = SummaryWriter(logdir=os.path.join(args.save_loc, 'log/val')) #
+    writer_train = SummaryWriter(logdir=os.path.join(args.save_loc, 'log/train')) #
     
     for epoch in range(1, n_epochs+1):
         # monitor training loss
@@ -326,5 +326,5 @@ def train_convVAE(train_loader,test_loader,n_epochs): #model,
 
 if __name__=="__main__":
     train_data, train_loader, test_loader = get_data()
-    train_convVAE(train_loader,test_loader,args.num_epochs)
+    train_convVAE(train_loader,test_loader,args.num_epochs) #
 
