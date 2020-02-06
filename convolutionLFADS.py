@@ -20,12 +20,13 @@ from objective import *
 from scheduler import LFADS_Scheduler
 
 
-# parser = argparse.ArgumentParser()
-# parser.add_argument('--save_loc', default='./', type=str)
-# parser.add_argument('--num_epochs', default=500, type=int)
+parser = argparse.ArgumentParser()
+parser.add_argument('--save_loc', default='./', type=str)
+parser.add_argument('--num_epochs', default=500, type=int)
 
-# global args; args = parser.parse_args()
+global args; args = parser.parse_args()
 os.environ["CUDA_VISIBLE_DEVICES"] = '0,1'
+
 torch.backends.cudnn.benchmark = True
 
 class conv_block(nn.Module):# *args, **kwargs 
@@ -132,7 +133,7 @@ class convVAE(nn.Module):
         x = x.reshape(x.shape[0],x.shape[1],-1)
         
         x = x.permute(1,0,2)
-        r,_ = self.lfads(x)
+        r, (factors, gen_inputs) = self.lfads(x)
         x = r['data']
         x = x.permute(1,0,2)
         # call LFADS here:
@@ -156,7 +157,7 @@ class convVAE(nn.Module):
         
 
 #         return v_p
-        return x
+        return x, factors
 
 
 def get_data():
@@ -168,7 +169,7 @@ def get_data():
 
     # load the training and test datasets
 
-    data_dict = generate_lorenz_data(20, 65, 50, 10, save=False)
+    data_dict = generate_lorenz_data(20, 65, 50, 100, N_stepsinbin = 10, save=False)
     cells = data_dict['cells']
     traces = data_dict['train_fluor']
     train_data = SyntheticCalciumVideoDataset(traces=traces, cells=cells)
@@ -278,7 +279,7 @@ def train_convVAE(train_loader,test_loader,n_epochs): #model,
             # clear the gradients of all optimized variables
             optimizer.zero_grad()
             # forward pass: compute predicted outputs by passing inputs to the model
-            outputs = model(videos)
+            outputs,_ = model(videos)
             # calculate the loss
             recon_loss, kl_loss, l2_loss = criterion(outputs, videos,lfads)
             loss = recon_loss + kl_loss + l2_loss
@@ -300,7 +301,7 @@ def train_convVAE(train_loader,test_loader,n_epochs): #model,
             # no need to flatten images
             videos_test = data_test.to(device)
             # forward pass: compute predicted outputs by passing inputs to the model
-            outputs_test = model(videos_test)
+            outputs_test,_ = model(videos_test)
             # calculate the loss
             recon_loss_test, kl_loss_test, l2_loss_test = criterion(outputs_test, videos_test,lfads)
             loss_test = recon_loss_test + kl_loss_test + l2_loss_test
