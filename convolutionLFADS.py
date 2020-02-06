@@ -83,14 +83,14 @@ class convVAE(nn.Module):
         device     = 'cuda' if torch.cuda.is_available() else 'cpu';
         
         in_f = 1
-        out_f = [10,20,40]#[1,1]#
+        out_f = [16,32,64]#[1,1]#
         all_f = [in_f,*out_f]
         self.n_layers = 3
         
         self.video_dim_space = 128
         self.video_dim_time = 10
         self.final_size = 16#32
-        self.final_f = 40#20#3
+        self.final_f = 64#20#3
         
         self.convlayers = nn.ModuleList()
         for n in range(0,self.n_layers):
@@ -290,7 +290,7 @@ def train_convVAE(train_loader,test_loader,n_epochs): #model,
             train_loss += loss.item()*videos.size(0)
             i += 1
             
-            writer_train.add_scalar('total/loss', train_loss, epoch)
+        writer_train.add_scalar('total/loss', train_loss, epoch)
          
         test_loss = 0.0
         for data_test in test_loader:
@@ -309,7 +309,7 @@ def train_convVAE(train_loader,test_loader,n_epochs): #model,
             test_loss += loss_test.item()*videos.size(0)
             i += 1
             
-            writer_val.add_scalar('total/loss', test_loss, epoch)
+        writer_val.add_scalar('total/loss', test_loss, epoch)
             
 #             scheduler.step(loss)
             
