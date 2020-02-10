@@ -25,7 +25,7 @@ parser.add_argument('--save_loc', default='./', type=str)
 parser.add_argument('--num_epochs', default=500, type=int)
 
 global args; args = parser.parse_args()
-os.environ["CUDA_VISIBLE_DEVICES"] = '0,1'
+# os.environ["CUDA_VISIBLE_DEVICES"] = '0,1'
 
 torch.backends.cudnn.benchmark = True
 
@@ -169,7 +169,7 @@ def get_data():
 
     # load the training and test datasets
 
-    data_dict = generate_lorenz_data(20, 65, 50, 100, N_stepsinbin = 10, save=False)
+    data_dict = generate_lorenz_data(20, 65, 50, 100, N_stepsinbin = 2, save=False)
     cells = data_dict['cells']
     traces = data_dict['train_fluor']
     train_data = SyntheticCalciumVideoDataset(traces=traces, cells=cells)
@@ -177,7 +177,7 @@ def get_data():
     
     num_workers = 0
     # how many samples per batch to load
-    batch_size = 65
+    batch_size = 20
 
     # prepare data loaders
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, num_workers=num_workers)
