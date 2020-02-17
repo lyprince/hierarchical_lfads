@@ -9,21 +9,23 @@ scheduler:
   lr_min: 1.0e-05
   scheduler_factor: 0.95
   scheduler_patience: 6
-  scheduler_cooldown: 6
+  scheduler_cooldown: 0
 
 objective:
-  kl_weight_init : 0.0
-  kl_weight_min: 0.0
-  kl_weight_max: 1.0
-  kl_weight_schedule_dur: 1600
-  kl_weight_schedule_start: 0
-  l2_weight_init: 0.0
-  l2_weight_min: 0.0
-  l2_weight_max: 1.0
-  l2_weight_schedule_dur: 1600
-  l2_weight_schedule_start: 0.0
+  kl:
+    weight : 0.0
+    min: 0.0
+    max: 1.0
+    schedule_dur: 1600
+    schedule_start: 0
+  l2:
+    weight: 0.0
+    min: 0.0
+    max: 1.0
+    schedule_dur: 1600
+    schedule_start: 0.0
   l2_con_scale: 0
-  l2_gen_scale: 250
+  l2_gen_scale: 2000
 
 model:
   factor_size: 3

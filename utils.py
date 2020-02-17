@@ -5,38 +5,41 @@ import numpy as np
 import yaml
 
 def write_data(data_fname, data_dict, use_json=False, compression=None):
-  """Write data in HD5F format.
+    """Write data in HD5F format.
 
-  Args:
+    Args:
     data_fname: The filename of teh file in which to write the data.
     data_dict:  The dictionary of data to write. The keys are strings
       and the values are numpy arrays.
     use_json (optional): human readable format for simple items
     compression (optional): The compression to use for h5py (disabled by
       default because the library borks on scalars, otherwise try 'gzip').
-  """
+    """
 
-  dir_name = os.path.dirname(data_fname)
-  if not os.path.exists(dir_name):
-    os.makedirs(dir_name)
+    dir_name = os.path.dirname(data_fname)
+    if not os.path.exists(dir_name):
+        os.makedirs(dir_name)
 
-  if use_json:
-    the_file = open(data_fname,'w')
-    json.dump(data_dict, the_file)
-    the_file.close()
-  else:
-    try:
-      with h5py.File(data_fname, 'w') as hf:
-        for k, v in data_dict.items():
-          clean_k = k.replace('/', '_')
-          if clean_k is not k:
-            print('Warning: saving variable with name: ', k, ' as ', clean_k)
-          else:
-            print('Saving variable with name: ', clean_k)
-          hf.create_dataset(clean_k, data=v, compression=compression)
-    except IOError:
-      print("Cannot open %s for writing.", data_fname)
-      raise
+    if use_json:
+        the_file = open(data_fname,'w')
+        json.dump(data_dict, the_file)
+        the_file.close()
+    else:
+        try:
+            with h5py.File(data_fname, 'w') as hf:
+                for k, v in data_dict.items():
+                    if type(k) is str:
+                        clean_k = k.replace('/', '_')
+                        if clean_k is not k:
+                            print('Warning: saving variable with name: ', k, ' as ', clean_k)
+                        else:
+                            print('Saving variable with name: ', clean_k)
+                    else:
+                        clean_k = k
+                hf.create_dataset(clean_k, data=v, compression=compression)
+        except IOError:
+            print("Cannot open %s for writing.", data_fname)
+                    
 
 def read_data(data_fname):
     
