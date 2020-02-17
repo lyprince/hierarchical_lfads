@@ -36,11 +36,9 @@ class LFADS_Net(nn.Module):
         - max_norm           (int): maximum gradient norm
         - do_normalize_factors (bool): whether to normalize factors
         - device          (string): device to use
-                   
-    
     '''
     
-    def __init__(self, input_size, output_size = None, factor_size = 4,
+    def __init__(self, input_size, factor_size = 4,
                  g_encoder_size  = 64, c_encoder_size = 64,
                  g_latent_size   = 64, u_latent_size  = 1,
                  controller_size = 64, generator_size = 64,
@@ -55,7 +53,7 @@ class LFADS_Net(nn.Module):
         super(LFADS_Net, self).__init__()
         
         self.input_size           = input_size
-        self.output_size          = input_size if output_size is None else output_size
+#         self.output_size          = input_size if output_size is None else output_size
         self.g_encoder_size       = g_encoder_size
         self.c_encoder_size       = c_encoder_size
         self.g_latent_size        = g_latent_size
@@ -102,9 +100,7 @@ class LFADS_Net(nn.Module):
             self.fc_genstate = Identity(in_features=self.g_latent_size, out_features=self.generator_size)
         else:
             self.fc_genstate = nn.Linear(in_features= self.g_latent_size, out_features= self.generator_size)
-        
-        self.fc_logrates    = nn.Linear(in_features= self.factor_size, out_features= self.output_size)
-        
+                
         # Initialize learnable biases
         self.g_encoder_init  = nn.Parameter(torch.zeros(2, self.g_encoder_size))
         if self.c_encoder_size > 0 and self.controller_size > 0 and self.u_latent_size > 0:
@@ -196,10 +192,11 @@ class LFADS_Net(nn.Module):
             # Instantiate AR1 process as mean and variance per time step
             self.u_prior_mean, self.u_prior_logvar = self._gp_to_normal(self.u_prior_gp_mean, self.u_prior_gp_logvar, self.u_prior_gp_logtau, gen_inputs)
         
+        return factors
         # Create reconstruction dictionary
-        recon = {'rates' : self.fc_logrates(factors).exp()}
-        recon['data'] = recon['rates'].clone()
-        return recon, (factors, gen_inputs)
+#         recon = {'rates' : self.fc_logrates(factors).exp()}
+#         recon['data'] = recon['rates'].clone()
+#         return recon, (factors, gen_inputs)
     
         
     def sample_gaussian(self, mean, logvar):
@@ -272,6 +269,82 @@ class LFADS_Net(nn.Module):
                 
     def normalize_factors(self):
         self.generator.fc_factors.weight.data = F.normalize(self.generator.fc_factors.weight.data, dim=1)
+    
+class LFADS_SingleSession_Net(LFADS_Net):
+    
+    def __init__(self, input_size, factor_size = 4,
+                 g_encoder_size  = 64, c_encoder_size = 64,
+                 g_latent_size   = 64, u_latent_size  = 1,
+                 controller_size = 64, generator_size = 64,
+                 prior = {'g0' : {'mean' : {'value': 0.0, 'learnable' : True},
+                                  'var'  : {'value': 0.1, 'learnable' : False}},
+                          'u'  : {'mean' : {'value': 0.0, 'learnable' : False},
+                                  'var'  : {'value': 0.1, 'learnable' : True},
+                                  'tau'  : {'value': 10,  'learnable' : True}}},
+                 clip_val=5.0, dropout=0.0, max_norm = 200, deep_freeze = False,
+                 do_normalize_factors=True, factor_bias = False, device='cpu'):
+        
+        super(LFADS_SingleSession_Net, self).__init__(input_size = input_size, factor_size = factor_size, prior = prior,
+                                                      g_encoder_size   = g_encoder_size, c_encoder_size = c_encoder_size,
+                                                      g_latent_size    = g_latent_size, u_latent_size = u_latent_size,
+                                                      controller_size  = controller_size, generator_size = generator_size,
+                                                      clip_val=clip_val, dropout=dropout, max_norm = max_norm, deep_freeze = deep_freeze,
+                                                      do_normalize_factors=do_normalize_factors, factor_bias = factor_bias, device=device)
+        
+        self.fc_logrates = nn.Linear(in_features= self.factor_size, out_features= self.input_size)
+        
+        self.initialize_weights()
+        
+    def forward(self, input):
+        factors = super(LFADS_SingleSession_Net, self).forward(input.permute(1, 0, 2))
+        recon = {'rates' : self.fc_logrates(factors).exp().permute(1, 0, 2)}
+        recon['data'] = recon['rates'].clone()
+        return recon, factors
+    
+class LFADS_MultiSession_Net(LFADS_Net):
+    
+    def __init__(self, W_in_list, W_out_list, b_in_list, b_out_list, factor_size = 4,
+                 g_encoder_size  = 64, c_encoder_size = 64,
+                 g_latent_size   = 64, u_latent_size  = 1,
+                 controller_size = 64, generator_size = 64,
+                 prior = {'g0' : {'mean' : {'value': 0.0, 'learnable' : True},
+                                  'var'  : {'value': 0.1, 'learnable' : False}},
+                          'u'  : {'mean' : {'value': 0.0, 'learnable' : False},
+                                  'var'  : {'value': 0.1, 'learnable' : True},
+                                  'tau'  : {'value': 10,  'learnable' : True}}},
+                 clip_val=5.0, dropout=0.0, max_norm = 200, deep_freeze = False,
+                 do_normalize_factors=True, factor_bias = False, device='cpu'):
+        
+        super(LFADS_MultiSession_Net, self).__init__(input_size = factor_size, factor_size = factor_size, prior = prior,
+                                                     g_encoder_size   = g_encoder_size, c_encoder_size = c_encoder_size,
+                                                     g_latent_size    = g_latent_size, u_latent_size = u_latent_size,
+                                                     controller_size  = controller_size, generator_size = generator_size,
+                                                     clip_val=clip_val, dropout=dropout, max_norm = max_norm, deep_freeze = deep_freeze,
+                                                     do_normalize_factors=do_normalize_factors, factor_bias = factor_bias, device=device)
+        
+        for idx, (W_in, b_in, W_out, b_out) in enumerate(zip(W_in_list, b_in_list, W_out_list, b_out_list)):
+            assert W_in.shape[1] == self.factor_size, 'Read in matrix should have dim 1 = %i, but has dims [%i, %i]'%(self.factor_size, W_in.shape[0], W_in.shape[1])
+            assert W_out.shape[0] == self.factor_size, 'Read out matrix should have dim 0 = %i, but has dims [%i, %i]'%(self.factor_size, W_out.shape[0], W_out.shape[1])
+            setattr(self, 'fc_input_%i'%idx, nn.Linear(in_features=W_in.shape[0], out_features=self.factor_size))
+            setattr(self, 'fc_logrates_%i'%idx, nn.Linear(in_features=self.factor_size, out_features=W_in.shape[0]))
+            
+            getattr(self, 'fc_input_%i'%idx).weight.data = W_in.permute(1, 0)
+            getattr(self, 'fc_input_%i'%idx).bias.data = b_in
+            getattr(self, 'fc_logrates_%i'%idx).weight.data = W_out.permute(1, 0)
+            getattr(self, 'fc_logrates_%i'%idx).bias.data = b_out
+            
+#             getattr(self, 'fc_input_%i'%idx).weight.requires_grad = False
+#             getattr(self, 'fc_logrates_%i'%idx).weight.requires_grad = False
+#             getattr(self, 'fc_input_%i'%idx).bias.requires_grad = False
+#             getattr(self, 'fc_logrates_%i'%idx).bias.requires_grad = False
+            
+    def forward(self, input):
+        aligned_input = getattr(self, 'fc_input_%i'%input.session)(input).permute(1, 0, 2)
+        factors = super(LFADS_MultiSession_Net, self).forward(aligned_input)
+        recon = {'rates' : getattr(self, 'fc_logrates_%i'%input.session)(factors).exp().permute(1, 0, 2)}
+        recon['data'] = recon['rates'].clone()
+        return recon, factors
+        
     
 class LFADS_Encoder(nn.Module):
     '''

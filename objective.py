@@ -3,37 +3,53 @@ import torch.nn as nn
 import pdb
 from math import log
 
-class SVLAE_Loss(nn.Module):
-    def __init__(self, loglikelihood_obs, loglikelihood_deep,
-                 kl_obs_weight_init=0.0, kl_deep_weight_init=0.0, l2_weight_init=0.0,
-                 kl_obs_weight_schedule_dur= 2000, kl_deep_weight_schedule_dur=2000, l2_weight_schedule_dur=2000,
-                 kl_obs_weight_schedule_start=0, kl_deep_weight_schedule_start=2000, l2_weight_schedule_start=2000,
-                 kl_obs_weight_max=1.0, kl_deep_weight_max=1.0, l2_weight_max=1.0,
-                 l2_con_scale=0.0, l2_gen_scale=0.0):
-        super(SVLAE_Loss, self).__init__()
+class Base_Loss(nn.Module):
+    def __init__(self, loss_weight_dict, l2_gen_scale=0.0, l2_con_scale=0.0):
+        super(Base_Loss, self).__init__()
+        self.loss_weights = loss_weight_dict
+        self.l2_gen_scale = l2_gen_scale
+        self.l2_con_scale = l2_con_scale
+
+    #------------------------------------------------------------------------------
+    #------------------------------------------------------------------------------
         
+    def forward(self, x_orig, x_recon, model):
+        pass
+    
+    #------------------------------------------------------------------------------
+    #------------------------------------------------------------------------------
+
+    def weight_schedule_fn(self, step):
+        '''
+        weight_schedule_fn(step)
+        
+        Calculate the KL and L2 regularization weights from the current training step number. Imposes
+        linearly increasing schedule on regularization weights to prevent early pathological minimization
+        of KL divergence and L2 norm before sufficient data reconstruction improvement. See bullet-point
+        4 of section 1.9 in online methods
+        
+        required arguments:
+            - step (int) : training step number
+        '''
+        
+        for key in self.loss_weights.keys():
+            # Get step number of scheduler
+            weight_step = max(step - self.loss_weights[key]['schedule_start'], 0)
+            
+            # Calculate schedule weight
+            self.loss_weights[key]['weight'] = max(min(weight_step/ self.loss_weights[key]['schedule_dur'], self.loss_weights[key]['max']), self.loss_weights[key]['min'])
+
+class SVLAE_Loss(Base_Loss):
+    def __init__(self, loglikelihood_obs, loglikelihood_deep,
+                 loss_weight_dict = {'kl_obs' : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 0,    'max' : 1.0, 'min' : 0.0},
+                                     'kl_deep': {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 2000, 'max' : 1.0, 'min' : 0.0},
+                                     'l2'     : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 2000, 'max' : 1.0, 'min' : 0.0}},
+                 l2_con_scale=0.0, l2_gen_scale=0.0):
+        
+        super(SVLAE_Loss, self).__init__(loss_weight_dict=loss_weight_dict, l2_con_scale=l2_con_scale, l2_gen_scale=l2_gen_scale)
         self.loglikelihood_obs  = loglikelihood_obs
         self.loglikelihood_deep = loglikelihood_deep
-        
-        self.loss_weights = {'kl_obs' : {'weight' : kl_obs_weight_init,
-                                         'schedule_dur' : kl_obs_weight_schedule_dur,
-                                         'schedule_start' : kl_obs_weight_schedule_start,
-                                         'max' : kl_obs_weight_max,
-                                         'min' : kl_obs_weight_init},
-                             'kl_deep' : {'weight' : kl_deep_weight_init,
-                                         'schedule_dur' : kl_deep_weight_schedule_dur,
-                                         'schedule_start' : kl_deep_weight_schedule_start,
-                                         'max' : kl_deep_weight_max,
-                                         'min' : kl_deep_weight_init},
-                             'l2' : {'weight' : l2_weight_init,
-                                     'schedule_dur' : l2_weight_schedule_dur,
-                                     'schedule_start' : l2_weight_schedule_start,
-                                     'max' : l2_weight_max,
-                                     'min' : l2_weight_init}}
-        
-        self.l2_con_scale = l2_con_scale
-        self.l2_gen_scale = l2_gen_scale
-        
+
     def forward(self, x_orig, x_recon, model):
         kl_obs_weight = self.loss_weights['kl_obs']['weight']
         kl_deep_weight = self.loss_weights['kl_deep']['weight']
@@ -72,62 +88,21 @@ class SVLAE_Loss(nn.Module):
                      'total'      : float(loss.data)}
 
         return loss, loss_dict
-    
-    #------------------------------------------------------------------------------
-    #------------------------------------------------------------------------------
 
-    def weight_schedule_fn(self, step):
-        '''
-        weight_schedule_fn(step)
-        
-        Calculate the KL and L2 regularization weights from the current training step number. Imposes
-        linearly increasing schedule on regularization weights to prevent early pathological minimization
-        of KL divergence and L2 norm before sufficient data reconstruction improvement. See bullet-point
-        4 of section 1.9 in online methods
-        
-        required arguments:
-            - step (int) : training step number
-        '''
-        
-        for key in self.loss_weights.keys():
-            # Get step number of scheduler
-            weight_step = max(step - self.loss_weights[key]['schedule_start'], 0)
-            
-            # Calculate schedule weight
-            self.loss_weights[key]['weight'] = max(min(weight_step/ self.loss_weights[key]['schedule_dur'], self.loss_weights[key]['max']), self.loss_weights[key]['min'])
-    
-
-class LFADS_Loss(nn.Module):
+class LFADS_Loss(Base_Loss):
     def __init__(self, loglikelihood,
-                 kl_weight_init=0.0, l2_weight_init=0.0,
-                 kl_weight_schedule_dur = 2000, l2_weight_schedule_dur = 2000,
-                 kl_weight_schedule_start = 0, l2_weight_schedule_start = 0,
-                 kl_weight_max=1.0, l2_weight_max=1.0,
+                 loss_weight_dict= {'kl' : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 0, 'max' : 1.0, 'min' : 0.0},
+                                    'l2' : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 0, 'max' : 1.0, 'min' : 0.0}},
                  l2_con_scale=0.0, l2_gen_scale=0.0):
         
-        super(LFADS_Loss, self).__init__()
+        super(LFADS_Loss, self).__init__(loss_weight_dict=loss_weight_dict, l2_con_scale=l2_con_scale, l2_gen_scale=l2_gen_scale)
         self.loglikelihood = loglikelihood
-        
-        self.loss_weights = {'kl' : {'weight' : kl_weight_init,
-                                     'schedule_dur' : kl_weight_schedule_dur,
-                                     'schedule_start' : kl_weight_schedule_start,
-                                     'max' : kl_weight_max,
-                                     'min' : kl_weight_init},
-                             'l2' : {'weight' : l2_weight_init,
-                                     'schedule_dur' : l2_weight_schedule_dur,
-                                     'schedule_start' : l2_weight_schedule_start,
-                                     'max' : l2_weight_max,
-                                     'min' : l2_weight_init}}
-        
-        self.l2_con_scale = l2_con_scale
-        self.l2_gen_scale = l2_gen_scale
-        
         
     def forward(self, x_orig, x_recon, model):
         kl_weight = self.loss_weights['kl']['weight']
         l2_weight = self.loss_weights['l2']['weight']
         
-        recon_loss = -self.loglikelihood(x_orig.permute(1, 0, 2), x_recon['data'].permute(1, 0, 2))
+        recon_loss = -self.loglikelihood(x_orig, x_recon['data'])
 
         kl_loss = kl_weight * kldiv_gaussian_gaussian(post_mu  = model.g_posterior_mean,
                                                       post_lv  = model.g_posterior_logvar,
@@ -151,30 +126,6 @@ class LFADS_Loss(nn.Module):
                      'total' : float(loss.data)}
 
         return loss, loss_dict
-    
-    #------------------------------------------------------------------------------
-    #------------------------------------------------------------------------------
-
-    def weight_schedule_fn(self, step):
-        '''
-        weight_schedule_fn(step)
-        
-        Calculate the KL and L2 regularization weights from the current training step number. Imposes
-        linearly increasing schedule on regularization weights to prevent early pathological minimization
-        of KL divergence and L2 norm before sufficient data reconstruction improvement. See bullet-point
-        4 of section 1.9 in online methods
-        
-        required arguments:
-            - step (int) : training step number
-        '''
-        
-        for key in self.loss_weights.keys():
-            # Get step number of scheduler
-            weight_step = max(step - self.loss_weights[key]['schedule_start'], 0)
-            
-            # Calculate schedule weight
-            self.loss_weights[key]['weight'] = max(min(weight_step/ self.loss_weights[key]['schedule_dur'], self.loss_weights[key]['max']), self.loss_weights[key]['min'])
-            
             
 class LogLikelihoodPoisson(nn.Module):
     

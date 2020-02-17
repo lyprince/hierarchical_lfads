@@ -34,16 +34,12 @@ class RunManager():
         
         self.loss_dict = {'train' : {},
                           'valid' : {},
-                          'l2' : []}
+                          'l2'    : []}
         
         if load_checkpoint:
             self.load_checkpoint('recent')
             
-    def run(self):
-        if self.writer is not None:
-            if self.plotter is not None:
-                    self.plot_to_tensorboard()
-                    
+    def run(self):  
         for epoch in range(self.epoch, self.max_epochs):
             if self.optimizer.param_groups[0]['lr'] < self.scheduler.min_lrs[0]:
                 break
@@ -53,9 +49,10 @@ class RunManager():
             
             self.model.train()
             for i,x in enumerate(self.train_dl):
-                x = x[0].permute(1, 0, 2)
+#                 print(x[0].session)
+                x = x[0]
                 self.optimizer.zero_grad()
-                recon, latent = self.model(self.transforms(x))
+                recon, latent = self.model(x)
                 loss, loss_dict = self.objective(x_orig= x,
                                                  x_recon= recon,
                                                  model= self.model)
@@ -66,7 +63,10 @@ class RunManager():
                 bw_tic = time.time()
                 loss.backward()
                 bw_toc = time.time()
-               
+                
+                if torch.isnan(loss.data):
+                    break
+                
                 # Clip gradient norm
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.model.max_norm)
             
@@ -83,7 +83,11 @@ class RunManager():
                     self.optimizer, self.scheduler = self.model.unfreeze_parameters(self.step, self.optimizer, self.scheduler)
                     
                 self.step += 1
+                
+            if torch.isnan(loss.data):
+                break
               
+            train_data = x.clone()
             loss_dict = {} 
             for d in loss_dict_list: 
                 for k in d.keys(): 
@@ -103,11 +107,12 @@ class RunManager():
             self.model.eval()
             for i, x in enumerate(self.valid_dl):
                 with torch.no_grad():
-                    x = x[0].permute(1, 0, 2)
-                    recon, latent = self.model(self.transforms(x))
+                    x = x[0]
+                    recon, latent = self.model(x)
                     loss, loss_dict = self.objective(x_orig= x, x_recon= recon, model= self.model)
                     loss_dict_list.append(loss_dict)
                     
+            valid_data = x.clone()
             loss_dict = {} 
             for d in loss_dict_list: 
                 for k in d.keys(): 
@@ -123,7 +128,13 @@ class RunManager():
                     
             valid_loss = self.loss_dict['valid']['total'][-1]
             if valid_loss < self.best:
-                self.best = valid_loss
+                self.best = 0
+                for key,val in self.loss_dict['valid'].items():
+                    if 'recon' in key:
+                        self.best += val[-1]
+                    if ('kl' in key or 'l2' in key):
+                        full_val = val[-1] / self.objective.loss_weights[key]['weight']
+                        self.best += full_val
                 self.save_checkpoint('best')
                 
             self.save_checkpoint()
@@ -131,12 +142,11 @@ class RunManager():
                 self.write_to_tensorboard()
                 if self.plotter is not None:
                     if self.epoch % 25 == 0:
-                        self.plot_to_tensorboard()
+                        self.plot_to_tensorboard(train_data, valid_data)
                         
                 if self.do_health_check:
                     self.health_check(self.model)
-            
-            
+                    
             toc = time.time()
             
             results_string = 'Epoch %5d, Epoch time = %.3f s, Loss (train, valid): '%(self.epoch, toc - tic)
@@ -169,12 +179,10 @@ class RunManager():
             weight = self.objective.loss_weights[key]['weight']
             self.writer.add_scalar('2_Optimizer/2.%i_%s_weight'%(kx+1, key), weight, self.epoch)
         
-    def plot_to_tensorboard(self):
-        figs_dict_train = self.plotter['train'].plot_summary(model = self.model,
-                                                    data  = self.train_dl.dataset.tensors[0])
+    def plot_to_tensorboard(self, train_data, valid_data):
+        figs_dict_train = self.plotter['train'].plot_summary(model = self.model, data  = train_data)
         
-        figs_dict_valid = self.plotter['valid'].plot_summary(model = self.model,
-                                                    data  = self.valid_dl.dataset.tensors[0])
+        figs_dict_valid = self.plotter['valid'].plot_summary(model = self.model, data  = valid_data)
         
         fig_names = ['traces', 'inputs', 'factors', 'rates', 'spikes']
         for fn in fig_names:

@@ -1,12 +1,12 @@
 optimizer:
-  lr_init: 0.01
+  lr_init: 1.0e-04
   betas: !!python/tuple
   - 0.9
   - 0.99
   eps: 0.1
 
 scheduler:
-  lr_min: 1.0e-05
+  lr_min: 1.0e-07
   scheduler_factor: 0.95
   scheduler_patience: 6
   scheduler_cooldown: 0
@@ -28,13 +28,13 @@ objective:
   l2_gen_scale: 2000
 
 model:
-  factor_size: 3
-  g_encoder_size: 64
+  factor_size: 40
+  g_encoder_size: 128
   c_encoder_size: 0
-  g_latent_size: 64
+  g_latent_size: 128
   u_latent_size: 0
   c_controller_size: 0
-  generator_size: 64
+  generator_size: 128
   
   prior:
     g0: 
