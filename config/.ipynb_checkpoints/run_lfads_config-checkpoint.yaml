@@ -1,0 +1,11 @@
+name: lorenz_700_lfads
+max_trials: 100
+
+algorithms:
+  asha:
+    seed: null
+    num_rungs: 8
+    num_brackets: 1
+
+producer:
+  strategy: StubParallelStrategy

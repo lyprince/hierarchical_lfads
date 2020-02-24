@@ -33,6 +33,8 @@ parser.add_argument('--patience', type=int, default=None)
 parser.add_argument('--weight_schedule_dur', type=int, default=None)
 parser.add_argument('--kl_max', type=float, default=None)
 
+# parser.add_argument('--config', type=yaml.safe_load)
+
 def main():
     args = parser.parse_args()
     
