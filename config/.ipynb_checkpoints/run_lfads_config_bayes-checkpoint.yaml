@@ -1,5 +1,6 @@
 name: lorenz_700_lfads_bayes
 max_trials: 100
+worker_trials: 1
 
 algorithms:
   BayesianOptimizer:

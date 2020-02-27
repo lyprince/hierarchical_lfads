@@ -33,7 +33,7 @@ model:
   c_encoder_size: 0
   g_latent_size: 64
   u_latent_size: 0
-  c_controller_size: 0
+  controller_size: 0
   generator_size: 64
   
   prior:

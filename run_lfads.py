@@ -93,7 +93,7 @@ def main():
                                     c_encoder_size       = hyperparams['model']['c_encoder_size'],
                                     g_latent_size        = hyperparams['model']['g_latent_size'],
                                     u_latent_size        = hyperparams['model']['u_latent_size'],
-                                    controller_size      = hyperparams['model']['c_controller_size'],
+                                    controller_size      = hyperparams['model']['controller_size'],
                                     generator_size       = hyperparams['model']['generator_size'],
                                     prior                = hyperparams['model']['prior'],
                                     clip_val             = hyperparams['model']['clip_val'],

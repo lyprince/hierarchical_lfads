@@ -37,8 +37,16 @@ class Base_Loss(nn.Module):
             weight_step = max(step - self.loss_weights[key]['schedule_start'], 0)
             
             # Calculate schedule weight
-            self.loss_weights[key]['weight'] = max(min(weight_step/ self.loss_weights[key]['schedule_dur'], self.loss_weights[key]['max']), self.loss_weights[key]['min'])
+            self.loss_weights[key]['weight'] = max(min(self.loss_weights[key]['max'] * weight_step/ self.loss_weights[key]['schedule_dur'], self.loss_weights[key]['max']), self.loss_weights[key]['min'])
 
+    def any_zero_weights(self):
+        for key, val in self.loss_weights.items():
+            if val['weight'] == 0:
+                return True
+            else:
+                pass
+        return False
+            
 class SVLAE_Loss(Base_Loss):
     def __init__(self, loglikelihood_obs, loglikelihood_deep,
                  loss_weight_dict = {'kl_obs' : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 0,    'max' : 1.0, 'min' : 0.0},
@@ -56,7 +64,7 @@ class SVLAE_Loss(Base_Loss):
         l2_weight = self.loss_weights['l2']['weight']
 #         pdb.set_trace()
 
-        recon_obs_loss  = -self.loglikelihood_obs(x_orig.permute(1, 0, 2), x_recon['data'].permute(1, 0, 2), model.obs_model.generator.calcium_generator.logvar)
+        recon_obs_loss  = -self.loglikelihood_obs(x_orig, x_recon['data'], model.obs_model.generator.calcium_generator.logvar)
         recon_deep_loss = -self.loglikelihood_deep(x_recon['spikes'].permute(1, 0, 2), x_recon['rates'].permute(1, 0, 2))
 
         kl_obs_loss = kl_obs_weight * kldiv_gaussian_gaussian(post_mu   = model.obs_model.u_posterior_mean,

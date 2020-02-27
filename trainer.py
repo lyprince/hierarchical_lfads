@@ -85,6 +85,7 @@ class RunManager():
                 self.step += 1
                 
             if torch.isnan(loss.data):
+                print('Loss is NaN')
                 break
               
             train_data = x.clone()
@@ -127,22 +128,23 @@ class RunManager():
                     self.loss_dict['valid'][key] = [loss_dict[key]]
                     
             valid_loss = self.loss_dict['valid']['total'][-1]
-            if valid_loss < self.best:
-                self.best = 0
-                for key,val in self.loss_dict['valid'].items():
-                    if 'recon' in key:
-                        self.best += val[-1]
-                    if ('kl' in key or 'l2' in key):
-                        full_val = val[-1] / self.objective.loss_weights[key]['weight']
-                        self.best += full_val
-                self.save_checkpoint('best')
+            if not self.objective.any_zero_weights():
+                if valid_loss < self.best:
+                    self.best = 0
+                    for key,val in self.loss_dict['valid'].items():
+                        if 'recon' in key:
+                            self.best += val[-1]
+                        if ('kl' in key):
+                            full_val = val[-1] / self.objective.loss_weights[key]['weight']
+                            self.best += full_val
+                    self.save_checkpoint('best')
                 
             self.save_checkpoint()
             if self.writer is not None:
                 self.write_to_tensorboard()
                 if self.plotter is not None:
                     if self.epoch % 25 == 0:
-                        self.plot_to_tensorboard(train_data, valid_data)
+                        self.plot_to_tensorboard()
                         
                 if self.do_health_check:
                     self.health_check(self.model)
@@ -158,6 +160,21 @@ class RunManager():
             results_string+= ' %s (%.2f)'%('l2', self.loss_dict['l2'][self.epoch-1])
             
             print(results_string, flush=True)
+            
+            # Check if local minima with 0 KL or L2 loss reached
+            in_local_minima = False
+            if not self.objective.any_zero_weights():
+                for key,val in self.loss_dict['valid'].items():
+                    if ('kl' in key or 'l2' in key):
+                        if val[-1] / self.objective.loss_weights[key]['weight'] < 0.1:
+                            in_local_minima = True
+                    else:
+                        if val[-1] < 0.1:
+                            in_local_minima = True
+                            
+            if in_local_minima:
+                print('Stuck in local minima')
+                break
             
     def write_to_tensorboard(self):
         
@@ -179,10 +196,10 @@ class RunManager():
             weight = self.objective.loss_weights[key]['weight']
             self.writer.add_scalar('2_Optimizer/2.%i_%s_weight'%(kx+1, key), weight, self.epoch)
         
-    def plot_to_tensorboard(self, train_data, valid_data):
-        figs_dict_train = self.plotter['train'].plot_summary(model = self.model, data  = train_data)
+    def plot_to_tensorboard(self):
+        figs_dict_train = self.plotter['train'].plot_summary(model= self.model, dl= self.train_dl)
         
-        figs_dict_valid = self.plotter['valid'].plot_summary(model = self.model, data  = valid_data)
+        figs_dict_valid = self.plotter['valid'].plot_summary(model= self.model, dl= self.valid_dl)
         
         fig_names = ['traces', 'inputs', 'factors', 'rates', 'spikes']
         for fn in fig_names:

@@ -67,7 +67,6 @@ class SVLAE_Net(nn.Module):
                                                 device          = self.device)
         
         self.deep_model           = LFADS_Net(input_size      = self.obs_encoder_size * 2,
-                                              output_size     = self.input_size,
                                               g_encoder_size  = self.deep_g_encoder_size,
                                               c_encoder_size  = self.deep_c_encoder_size,
                                               g_latent_size   = self.deep_g_latent_size,
@@ -83,12 +82,9 @@ class SVLAE_Net(nn.Module):
                                               factor_bias = self.factor_bias,
                                               device   = self.device)
         
+        self.deep_model.add_module('fc_logrates', nn.Linear(self.factor_size, self.input_size))
         
         self.initialize_weights()
-
-        for n, p in self.named_parameters():
-            if 'weight' in n:
-                print('%s, %.4f, %.4f, %.4f'%(n, float(p.data.mean()), float(p.data.std()), p.shape[1]**-0.5))
         
         if self.deep_freeze:
             for p in self.deep_model.parameters():
@@ -96,6 +92,7 @@ class SVLAE_Net(nn.Module):
             
     def forward(self, input):
         
+        input = input.permute(1, 0, 2)
         self.steps_size, self.batch_size, input_size = input.shape
         assert input_size == self.input_size, 'input_size does not match self.input_size'
         
@@ -120,8 +117,8 @@ class SVLAE_Net(nn.Module):
         spikes = torch.empty(0, self.batch_size, self.input_size, device=self.device)
         obs    = torch.empty(0, self.batch_size, self.input_size, device=self.device)
         
-        self.obs_model.u_posterior_mean   = torch.empty(self.batch_size, 0, self.u1_latent_size, device=self.device)
-        self.obs_model.u_posterior_logvar = torch.empty(self.batch_size, 0, self.u1_latent_size, device=self.device)
+        self.obs_model.u_posterior_mean   = torch.empty(self.batch_size, 0, self.obs_latent_size, device=self.device)
+        self.obs_model.u_posterior_logvar = torch.empty(self.batch_size, 0, self.obs_latent_size, device=self.device)
         
         if self.deep_c_encoder_size > 0 and self.deep_controller_size > 0 and self.deep_u_latent_size > 0:
             deep_gen_inputs = torch.empty(0, self.batch_size, self.deep_u_latent_size, device=self.device)
@@ -154,7 +151,7 @@ class SVLAE_Net(nn.Module):
             
             obs_generator_state = self.obs_model.sample_gaussian(obs_u_mean, obs_u_logvar)
             
-            deep_generator_state, factor_state = self.deep_model.generator(deep_generator_input, generator_state)
+            deep_generator_state, factor_state = self.deep_model.generator(deep_generator_input, deep_generator_state)
             
             factors = torch.cat((factors, factor_state.unsqueeze(0)), dim=0)
             
@@ -166,14 +163,14 @@ class SVLAE_Net(nn.Module):
             
         if self.deep_c_encoder_size > 0 and self.deep_controller_size > 0 and self.deep_u_latent_size > 0:
             # Instantiate AR1 process as mean and variance per time step
-            self.deep_model.u_prior_mean, self.deep_model.u_prior_logvar = self.deep_model._gp_to_normal(self.deep_model.u_prior_gp_mean, self.deep_model.u_prior_gp_logvar, self.deep_model.u_prior_gp_logtau, gen2_inputs)
+            self.deep_model.u_prior_mean, self.deep_model.u_prior_logvar = self.deep_model._gp_to_normal(self.deep_model.u_prior_gp_mean, self.deep_model.u_prior_gp_logvar, self.deep_model.u_prior_gp_logtau, deep_gen_inputs)
             
         recon = {}
         recon['rates'] = self.deep_model.fc_logrates(factors).exp()
-        recon['data']  = obs
+        recon['data']  = obs.permute(1, 0, 2)
         recon['spikes'] = spikes
         
-        return recon, (factors, gen2_inputs)
+        return recon, (factors, deep_gen_inputs)
     
 
 
@@ -228,7 +225,7 @@ class Calcium_Net(nn.Module):
         
         self.input_size      = input_size
         self.encoder_size    = encoder_size
-        self.latent_size     = latent_size
+        self.u_latent_size   = latent_size
         self.controller_size = controller_size
         self.factor_size     = factor_size
         self.clip_val        = clip_val
@@ -242,11 +239,11 @@ class Calcium_Net(nn.Module):
         
         self.controller           = LFADS_ControllerCell(input_size      = self.encoder_size*2 + self.input_size,
                                                          controller_size = self.controller_size,
-                                                         latent_size     = self.latent_size,
+                                                         u_latent_size   = self.u_latent_size,
                                                          clip_val        = self.clip_val,
                                                          dropout         = dropout)
         
-        self.generator            = Calcium_Generator(input_size  = self.latent_size + self.factor_size,
+        self.generator            = Calcium_Generator(input_size  = self.u_latent_size + self.factor_size,
                                                       output_size = self.input_size,
                                                       parameters  = parameters,
                                                       dropout     = dropout,

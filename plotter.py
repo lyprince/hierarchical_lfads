@@ -20,7 +20,7 @@ class Plotter(object):
         self.truth = truth
     #------------------------------------------------------------------------------
     
-    def plot_summary(self, model, data, num_average=200, ix=None):
+    def plot_summary(self, model, dl, num_average=200, ix=None):
         
         '''
         plot_summary(data, truth=None, num_average=100, ix=None)
@@ -42,18 +42,20 @@ class Plotter(object):
         
         figs_dict = {}
         
+        data = dl.dataset.tensors[0]
+        
         batch_example, ix = batchify_random_sample(data=data, batch_size=num_average, ix=ix)
         figs_dict['ix'] = ix        
         
         model.eval()
         with torch.no_grad():
-            recon, (factors, inputs) = model(batch_example.permute(1, 0, 2))
+            recon, (factors, inputs) = model(batch_example)
         
         orig = data[ix].cpu().numpy()
 #         print(batch_example.shape, data.shape, recon['data'].shape)
         
 #         pdb.set_trace()
-        figs_dict['traces'] = self.plot_traces(recon['data'].mean(dim=1).detach().cpu().numpy(), orig, mode='activity', norm=False)
+        figs_dict['traces'] = self.plot_traces(recon['data'].mean(dim=0).detach().cpu().numpy(), orig, mode='activity', norm=False)
         figs_dict['traces'].suptitle('Actual fluorescence trace vs.\nestimated mean for a sampled trial')
         
         if self.truth:
@@ -66,6 +68,7 @@ class Plotter(object):
             if 'latent' in self.truth.keys():
                 pred_factors = factors.mean(dim=1).cpu().numpy()
                 true_factors = self.truth['latent'][ix]
+#                 pdb.set_trace()
                 figs_dict['truth_factors'] = self.plot_traces(pred_factors, true_factors, num_traces=true_factors.shape[-1], ncols=1)
                 figs_dict['truth_factors'].suptitle('Reconstructed vs ground-truth factors')
             else:

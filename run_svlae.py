@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import argparse
 import os
 
@@ -5,6 +7,8 @@ import torch
 import torchvision
 import torch.optim as opt
 import torchvision.transforms as trf
+
+from orion.client import report_results
 
 from trainer import RunManager
 from scheduler import LFADS_Scheduler
@@ -23,12 +27,74 @@ parser.add_argument('-t', '--use_tensorboard', action='store_true', default=Fals
 parser.add_argument('-r', '--restart', action='store_true', default=False)
 parser.add_argument('-c', '--do_health_check', action='store_true', default=False)
 
+parser.add_argument('--lr', type=float, default=None)
+parser.add_argument('--log10_lr', type=float, default=None)
+parser.add_argument('--kl_deep_max', type=float, default=None)
+parser.add_argument('--kl_obs_max', type=float, default=None)
+parser.add_argument('--kl_obs_dur', type=int, default=None)
+parser.add_argument('--kl_obs_dur_scale', type=int, default=1.0)
+parser.add_argument('--deep_start_p', type=int, default=None)
+parser.add_argument('--deep_start_p_scale', type=float, default=1.0)
+parser.add_argument('--l2_gen_scale', type=float, default=None)
+parser.add_argument('--l2_con_scale', type=float, default=None)
+parser.add_argument('--log10_l2_gen_scale', type=float, default=None)
+parser.add_argument('--log10_l2_con_scale', type=float, default=None)
+
+
 def main():
     args = parser.parse_args()
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     hyperparams = load_parameters(args.hyperparameter_path)
+    
+    orion_hp_string = ''
+    if args.lr or args.log10_lr:
+        if args.log10_lr:
+            lr = 10**args.log10_lr
+        else:
+            lr = args.lr
+        hyperparams['optimizer']['lr_init'] = lr
+        hyperparams['scheduler']['lr_min']  = lr * 1e-3
+        orion_hp_string += 'lr= %.4f\n'%lr
+        
+    if args.kl_obs_dur:
+        hyperparams['objective']['kl_obs']['schedule_dur'] = args.kl_obs_dur * args.kl_obs_dur_scale
+        orion_hp_string += 'kl_obs_dur= %i\n'%(args.kl_obs_dur*args.kl_obs_dur_scale)
+
+    if args.kl_obs_max:
+        hyperparams['objective']['kl_obs']['max'] = args.kl_obs_max
+        orion_hp_string += 'kl_obs_max= %.3f\n'%(args.kl_obs_max)
+        
+    if args.kl_deep_max:
+        hyperparams['objective']['kl_deep']['max'] = args.kl_deep_max
+        orion_hp_string += 'kl_deep_max= %.3f\n'%(args.kl_deep_max)
+    
+    if args.deep_start_p:
+        print('deep_start found')
+        deep_start = int(args.deep_start_p * args.deep_start_p_scale * hyperparams['objective']['kl_obs']['schedule_dur'])
+        hyperparams['objective']['kl_deep']['schedule_start'] = deep_start
+        hyperparams['objective']['l2']['schedule_start'] = deep_start
+        hyperparams['model']['unfreeze'] = deep_start
+        orion_hp_string += 'deep_start= %i\n'%deep_start
+        
+    if args.l2_gen_scale or args.log10_l2_gen_scale:
+        if args.log10_l2_gen_scale:
+            l2_gen_scale = 10**args.log10_l2_gen_scale
+        else:
+            l2_gen_scale = l2_gen_scale
+        hyperparams['objective']['l2_gen_scale'] = l2_gen_scale
+        orion_hp_string += 'l2_gen_scale= %.3f\n'%l2_gen_scale
+    
+    if args.l2_con_scale or args.log10_l2_con_scale:
+        if args.log10_l2_con_scale:
+            l2_con_scale = 10**args.log10_l2_con_scale
+        else:
+            l2_con_scale = args.l2_con_scale
+        hyperparams['objective']['l2_con_scale'] = l2_con_scale
+        orion_hp_string += 'l2_con_scale= %.3f\n'%l2_con_scale
+    
+    print(orion_hp_string, flush=True)
     
     data_name = args.data_path.split('/')[-1]
     model_name = hyperparams['model_name']
@@ -59,18 +125,9 @@ def main():
     
     objective = SVLAE_Loss(loglikelihood_obs        = loglikelihood_obs,
                            loglikelihood_deep       = loglikelihood_deep,
-                           kl_obs_weight_init           = hyperparams['objective']['kl_obs_weight_init'],
-                           kl_obs_weight_schedule_dur   = hyperparams['objective']['kl_obs_weight_schedule_dur'],
-                           kl_obs_weight_schedule_start = hyperparams['objective']['kl_obs_weight_schedule_start'],
-                           kl_obs_weight_max            = hyperparams['objective']['kl_obs_weight_max'],
-                           kl_deep_weight_init           = hyperparams['objective']['kl_deep_weight_init'],
-                           kl_deep_weight_schedule_dur   = hyperparams['objective']['kl_deep_weight_schedule_dur'],
-                           kl_deep_weight_schedule_start = hyperparams['objective']['kl_deep_weight_schedule_start'],
-                           kl_deep_weight_max            = hyperparams['objective']['kl_deep_weight_max'],
-                           l2_weight_init           = hyperparams['objective']['l2_weight_init'],
-                           l2_weight_schedule_dur   = hyperparams['objective']['l2_weight_schedule_dur'],
-                           l2_weight_schedule_start = hyperparams['objective']['l2_weight_schedule_start'],
-                           l2_weight_max            = hyperparams['objective']['l2_weight_max'],
+                           loss_weight_dict         = {'kl_deep': hyperparams['objective']['kl_deep'],
+                                                       'kl_obs' : hyperparams['objective']['kl_obs'],
+                                                       'l2'     : hyperparams['objective']['l2']},
                            l2_con_scale             = hyperparams['objective']['l2_con_scale'],
                            l2_gen_scale             = hyperparams['objective']['l2_gen_scale']).to(device)
     
@@ -81,10 +138,10 @@ def main():
                       obs_encoder_size      = hyperparams['model']['obs_encoder_size'],
                       obs_latent_size       = hyperparams['model']['obs_latent_size'],
                       obs_controller_size   = hyperparams['model']['obs_controller_size'],
-                      deep_encoder_size     = hyperparams['model']['deep_encoder_size'],
-                      deep_encoder_size     = hyperparams['model']['deep_encoder_size'],
-                      deep_latent_size      = hyperparams['model']['deep_latent_size'],
-                      deep_latent_size      = hyperparams['model']['deep_latent_size'],
+                      deep_g_encoder_size   = hyperparams['model']['deep_g_encoder_size'],
+                      deep_c_encoder_size   = hyperparams['model']['deep_c_encoder_size'],
+                      deep_g_latent_size    = hyperparams['model']['deep_g_latent_size'],
+                      deep_u_latent_size    = hyperparams['model']['deep_u_latent_size'],
                       deep_controller_size  = hyperparams['model']['deep_controller_size'],
                       generator_size        = hyperparams['model']['generator_size'],
                       prior                 = hyperparams['model']['prior'],
@@ -164,6 +221,13 @@ def main():
                              do_health_check = args.do_health_check)
 
     run_manager.run()
+    
+    if not torch._np.isfinite(run_manager.best):
+        run_manager.best = 1e8
+    
+    report_results([dict(name= 'valid_loss',
+                         type= 'objective',
+                         value= run_manager.best)])
 
 if __name__ == '__main__':
     main()

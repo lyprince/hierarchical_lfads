@@ -192,7 +192,7 @@ class LFADS_Net(nn.Module):
             # Instantiate AR1 process as mean and variance per time step
             self.u_prior_mean, self.u_prior_logvar = self._gp_to_normal(self.u_prior_gp_mean, self.u_prior_gp_logvar, self.u_prior_gp_logtau, gen_inputs)
         
-        return factors
+        return (factors, gen_inputs)
         # Create reconstruction dictionary
 #         recon = {'rates' : self.fc_logrates(factors).exp()}
 #         recon['data'] = recon['rates'].clone()
@@ -296,10 +296,10 @@ class LFADS_SingleSession_Net(LFADS_Net):
         self.initialize_weights()
         
     def forward(self, input):
-        factors = super(LFADS_SingleSession_Net, self).forward(input.permute(1, 0, 2))
-        recon = {'rates' : self.fc_logrates(factors).exp().permute(1, 0, 2)}
-        recon['data'] = recon['rates'].clone()
-        return recon, factors
+        factors, gen_inputs = super(LFADS_SingleSession_Net, self).forward(input.permute(1, 0, 2))
+        recon = {'rates' : self.fc_logrates(factors).exp()}
+        recon['data'] = recon['rates'].clone().permute(1, 0, 2)
+        return recon, (factors, gen_inputs)
     
 class LFADS_MultiSession_Net(LFADS_Net):
     
@@ -340,10 +340,10 @@ class LFADS_MultiSession_Net(LFADS_Net):
             
     def forward(self, input):
         aligned_input = getattr(self, 'fc_input_%i'%input.session)(input).permute(1, 0, 2)
-        factors = super(LFADS_MultiSession_Net, self).forward(aligned_input)
+        factors, gen_inputs = super(LFADS_MultiSession_Net, self).forward(aligned_input)
         recon = {'rates' : getattr(self, 'fc_logrates_%i'%input.session)(factors).exp().permute(1, 0, 2)}
         recon['data'] = recon['rates'].clone()
-        return recon, factors
+        return recon, (factors, gen_inputs)
         
     
 class LFADS_Encoder(nn.Module):
