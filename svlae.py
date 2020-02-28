@@ -231,13 +231,13 @@ class Calcium_Net(nn.Module):
         self.clip_val        = clip_val
         self.device          = device
 
-        self.encoder              = Calcium_Encoder(input_size     = self.input_size,
-                                                    encoder_size   = self.encoder_size,
-                                                    clip_val       = self.clip_val,
-                                                    dropout        = dropout)
+        self.encoder         = Calcium_Encoder(input_size= self.input_size,
+                                               encoder_size= self.encoder_size,
+                                               clip_val= self.clip_val,
+                                               dropout= dropout)
 
         
-        self.controller           = LFADS_ControllerCell(input_size      = self.encoder_size*2 + self.input_size,
+        self.controller      = LFADS_ControllerCell(input_size      = self.encoder_size*2 + self.input_size,
                                                          controller_size = self.controller_size,
                                                          u_latent_size   = self.u_latent_size,
                                                          clip_val        = self.clip_val,

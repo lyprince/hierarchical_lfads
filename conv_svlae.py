@@ -11,8 +11,8 @@ class Conv1D_SVLAE_Net(nn.Module):
                  deep_g_encoder_size=64, deep_c_encoder_size=64,
                  deep_g_latent_size=32, deep_u_latent_size=1,
                  deep_controller_size=32,
-                 obs_encoder_hyperparams = {'sizes' : 5, 'strides'= 1, 'channels': 1, 'layers' : 3}
-                 obs_decoder_hyperparams = {'sizes' : 5, 'strides'= 1, 'channels': 1, 'layers' : 3}
+                 obs_encoder_hyperparams = {'strides'= 1, 'channels': 1, 'layers' : 3}
+                 obs_decoder_hyperparams = {'strides'= 1, 'channels': 1, 'layers' : 3}
                  obs_latent_size=64, obs_controller_size=64,
                  generator_size=64, factor_size=4,
                  prior= {'obs' : {'u'  : {'mean' : {'value': 0.0, 'learnable' : True},
@@ -123,17 +123,80 @@ class Conv1D_SVLAE_Net(nn.Module):
         self.deep_model.normalize_factors()
     
     
-    
-class CausalChannelConv1D_Block(nn.Module):
-    def __init__(self, )
+class Conv_Calcium_Net(nn.Module):
+    def __init__(input_size, dense_size,
+                 encoder_hyperparams, decoder_hyperparams,
+                 latent_size= 64, controller_size= 65, factor_size=4,
+                 parameters={'var' : {'value' : 0.1, 'learnable' : True}},
+                 prior= {'g0' : {'mean' : {'value': 0.0, 'learnable' : True},
+                                 'var'  : {'value': 0.1, 'learnable' : False}},
+                         'u'  : {'mean' : {'value': 0.0, 'learnable' : True},
+                                 'var'  : {'value': 0.1, 'learnable' : False}}}
+                 dropout=0.05, clip_val=5.0, device='cpu'):
+        
+        super(Conv_Calcium_Net, self).__init__()
+        
+        self.input_size      = input_size
+        self.dense_size      = dense_size
+        self.u_latent_size   = latent_size
+        self.controller_size = controller_size
+        self.factor_size     = factor_size
+        self.clip_val        = clip_val
+        self.device          = device
+        
+        self.conv_encoder = make_convnet(encoder_hyperparams)
+        
+        conv_encoder_out_dim = encoder_hyperparams['channels'][-1] * self.input_size
+        self.fc_con= nn.Linear(conv_encoder_out_dim, dense_size)
+        
+        self.controller   = LFADS_ControllerCell(input_size= conv_encoder_out_dim + self.input_size,
+                                                 controller_size= self.controller_size,
+                                                 u_latent_size= self.u_latent_size,
+                                                 clip_val= self.clip_val,
+                                                 dropout= dropout)
+        
+
+        self.conv_decoder = make_convnet(decoder_hyperparams)
+        
+        self.controller_init = nn.Parameter(torch.zeros(self.controller_size))
+            
+        self.u_prior_mean = torch.ones(self.u_latent_size, device=device) * prior['u']['mean']['value']
+        if prior['u']['mean']['learnable']:
+            self.u_prior_mean = nn.Parameter(self.u_prior_mean)
+        self.u_prior_logvar = torch.ones(self.u_latent_size, device=device) * log(prior['u']['var']['value'])
+        if prior['u']['var']['learnable']:
+            self.u_prior_logvar = nn.Parameter(self.u_prior_logvar)
+            
+    def forward():
+        pass
+        
+class CausalRowConv1d_Block(nn.Module):
+    def __init__(self, kernel_size, in_channels=1, out_channels=1, stride=1, dilation=1, bias=True, infer_padding=False):
+        
+        super(CausalRowConv1D_Block, self).__init__()
+        
+        self.conv  = CausalRowConv1d(kernel_size=kernel_size,
+                                     in_channels=in_channels,
+                                     out_channels=out_channels,
+                                     stride=stride,
+                                     dilation=dilation,
+                                     bias=bias,
+                                     infer_padding=infer_padding)
+        
+        self.norm   = nn.BatchNorm2d(features=out_channels)
+        
+        self.nonlin = nn.LeakyRelu()
+        
+    def forward(self, input):
+        return self.nonlin(self.norm(self.conv(input)))
     
     
 #--------
 # 1-D CAUSAL CHANNEL-SPECIFIC CONVOLUTION
 #--------
 
-class CausalChannelConv1d(torch.nn.Conv2d):
-    def __init__(self, kernel_size, out_channels=1, stride=1, dilaton=1, groups=1, bias=True, infer_padding=False):
+class CausalRowConv1d(torch.nn.Conv2d):
+    def __init__(self, kernel_size, in_channels=1, out_channels=1, stride=1, dilaton=1, groups=1, bias=True, infer_padding=False):
         
         # Setup padding
         if infer_padding:
@@ -142,8 +205,8 @@ class CausalChannelConv1d(torch.nn.Conv2d):
             self.__padding = (kernel_size - 1)
         
         '''
-        CausalChannelConv1d class. Implements channel-specific 1-D causal convolution. Applies same
-        set of convolution kernel to every channel independently. Padding only at start of time
+        CausalRowConv1d class. Implements Row-specific 1-D causal convolution. Applies same
+        set of convolution kernels to every row independently. Padding only at start of time
         dimension. Output dimensions are same as input dimensions.
         
         __init__(self, kernel_size, bias=True)
@@ -155,7 +218,7 @@ class CausalChannelConv1d(torch.nn.Conv2d):
         optional arguments:
             - bias (bool) : include bias (default=True)
         '''
-        super(CausalChannelConv1d, self).__init__(
+        super(CausalRowConv1d, self).__init__(
               in_channels=1,
               out_channels=out_channels,
               kernel_size = (kernel_size, 1),
@@ -167,11 +230,31 @@ class CausalChannelConv1d(torch.nn.Conv2d):
         
     def forward(self, input):
         # Include false channel dimension
-        result = super(CausalChannelConv1d, self).forward(input.unsqueeze(1))
+        result = super(CausalRowConv1d, self).forward(input)
         if self.__padding != 0:
             # Slice tensor to include padding only at start and remove false channel dimension
-            return result[:, :, :-self.__padding].squeeze(1)
+            return result[:, :, :-self.__padding]
         else:
             # Remove false channel dimension
-            return result.squeeze(1)
+            return result
     
+    
+def make_convnet(conv_params):
+    layer_def = zip([1] + conv_params['channels'][1:],
+                    conv_params['channels'],
+                    conv_params['sizes'],
+                    conv_params['strides'],
+                    conv_params['dilation'],
+                    conv_params['groups'])
+    
+    
+    net = nn.Sequential()
+    
+    for in_f, out_f, size, stride, dilation, groups in layer_def:
+        net.add_module(CausalRowConv1d_Block(kernel_size=size,
+                                             in_channels=in_f,
+                                             out_channels=out_f,
+                                             stride=stride,
+                                             dilation=dilation,
+                                             groups=groups))
+    return net
