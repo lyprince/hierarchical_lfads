@@ -82,7 +82,7 @@ def main():
         if args.log10_l2_gen_scale:
             l2_gen_scale = 10**args.log10_l2_gen_scale
         else:
-            l2_gen_scale = l2_gen_scale
+            l2_gen_scale = args.l2_gen_scale
         hyperparams['objective']['l2_gen_scale'] = l2_gen_scale
         orion_hp_string += 'l2_gen_scale= %.3f\n'%l2_gen_scale
     
@@ -94,15 +94,16 @@ def main():
         hyperparams['objective']['l2_con_scale'] = l2_con_scale
         orion_hp_string += 'l2_con_scale= %.3f\n'%l2_con_scale
     
-    print(orion_hp_string, flush=True)
-    
     data_name = args.data_path.split('/')[-1]
     model_name = hyperparams['model_name']
-    mhp_list = [key.replace('size', '').replace('_', '')[:4] + str(val) for key, val in hyperparams['model'].items() if 'size' in key]
+    mhp_list = [key.replace('size', '').replace('deep', 'd').replace('obs', 'o').replace('_', '')[:4] + str(val) for key, val in hyperparams['model'].items() if 'size' in key]
     mhp_list.sort()
     hyperparams['run_name'] = '_'.join(mhp_list)
+    orion_hp_string = orion_hp_string.replace('\n', '-').replace(' ', '')
+    orion_hp_string = '_orion('+orion_hp_string+')'
+    hyperparams['run_name'] += orion_hp_string
     save_loc = '%s/%s/%s/%s/'%(args.output_dir, data_name, model_name, hyperparams['run_name'])
-    
+
     if not os.path.exists(save_loc):
         os.makedirs(save_loc)
     

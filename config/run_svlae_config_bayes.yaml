@@ -1,4 +1,5 @@
 name: lorenz_700_svlae_bayes
+non_monitored_arguments: ['d', 'o']
 max_trials: 100
 algorithms:
   BayesianOptimizer:
