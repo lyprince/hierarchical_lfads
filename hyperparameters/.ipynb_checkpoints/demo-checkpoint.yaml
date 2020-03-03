@@ -1,0 +1,60 @@
+optimizer:
+  lr_init: 0.01
+  betas: !!python/tuple
+  - 0.9
+  - 0.99
+  eps: 0.1
+
+scheduler:
+  lr_min: 0.00001
+  scheduler_factor: 0.95
+  scheduler_patience: 6
+  scheduler_cooldown: 6
+
+objective:
+  kl_weight_init : 0.0
+  kl_weight_min: 0.0
+  kl_weight_max: 1.0
+  kl_weight_schedule_dur: 1600
+  kl_weight_schedule_start: 0
+  l2_weight_init: 0.0
+  l2_weight_min: 0.0
+  l2_weight_max: 1.0
+  l2_weight_schedule_dur: 1600
+  l2_weight_schedule_start: 0.0
+  l2_con_scale: 0
+  l2_gen_scale: 250
+
+model:
+  factor_size: 4
+  g_encoder_size: 64
+  c_encoder_size: 64
+  g_latent_size: 32
+  u_latent_size: 1
+  c_controller_size: 64
+  generator_size: 64
+  
+  prior:
+    g: 
+      mean: 
+        value: 0.0
+        learnable: true
+      var: 
+        value: 0.1
+        learnable: false
+
+    u: 
+      mean: 
+        value: 0.0
+        learnable: true
+      var: 
+        value: 0.1
+        learnable: false
+      tau:
+        value: 10
+        learnable: true
+
+  clip_val: 5.0
+  dropout: 0.05
+
+model_name: lfads
