@@ -15,7 +15,7 @@ from torchvision import datasets
 import torchvision.transforms as transforms
 from torch.autograd import Variable
 
-from lfads import LFADS_Net
+from lfads import LFADS_SingleSession_Net
 from objective import *
 from scheduler import LFADS_Scheduler
 
@@ -109,7 +109,7 @@ class convVAE(nn.Module):
 #         self.dec1 = deconv_block(out_f2,out_f1)
 #         self.dec2 = deconv_block(out_f1,in_f) 
 
-        self.lfads = LFADS_Net(self.final_size * self.final_size * self.final_f, output_size = None, factor_size = 4,
+        self.lfads = LFADS_SingleSession_Net(self.final_size * self.final_size * self.final_f, factor_size = 4,
                  g_encoder_size  = 64, c_encoder_size = 64,
                  g_latent_size   = 64, u_latent_size  = 1,
                  controller_size = 64, generator_size = 64,
@@ -124,6 +124,7 @@ class convVAE(nn.Module):
         
     def forward(self,video):
         x = video
+        print(x.shape)
         Ind = list()
         for n, layer in enumerate(self.convlayers):
             x, ind1 = layer(x)
@@ -169,7 +170,7 @@ def get_data():
 
     # load the training and test datasets
 
-    data_dict = generate_lorenz_data(20, 65, 50, 100, N_stepsinbin = 2, save=False)
+    data_dict = generate_lorenz_data(20, 65, 50, 20, N_stepsinbin = 2, save=False)
     cells = data_dict['cells']
     traces = data_dict['train_fluor']
     train_data = SyntheticCalciumVideoDataset(traces=traces, cells=cells)
