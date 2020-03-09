@@ -84,14 +84,14 @@ class convVAE(nn.Module):
         device     = 'cuda' if torch.cuda.is_available() else 'cpu';
         
         in_f = 1
-        out_f = [16,32,64]#[1,1]#
+        out_f = [16,32]#[16,32,64]#[1,1]#
         all_f = [in_f,*out_f]
-        self.n_layers = 3
+        self.n_layers = 2#3
         
         self.video_dim_space = 128
         self.video_dim_time = 10
-        self.final_size = 16#32
-        self.final_f = 64#20#3
+        self.final_size = 32#16#
+        self.final_f = 32#64#20#3
         
         self.convlayers = nn.ModuleList()
         for n in range(0,self.n_layers):
@@ -123,12 +123,29 @@ class convVAE(nn.Module):
 
         
     def forward(self,video):
+        frame_per_block = 10
         x = video
-        print(x.shape)
+        batch_size, num_ch, seq_len, w, h = x.shape
+        num_blocks = int(seq_len/frame_per_block)
+#         print(num_blocks)
+        x = x.view(batch_size,num_ch,num_blocks,frame_per_block,w,h).contiguous()
+        x = x.permute(0,2,1,3,4,5).contiguous()
+        x = x.view(batch_size * num_blocks,num_ch,frame_per_block,w,h).contiguous()
+        
+
         Ind = list()
         for n, layer in enumerate(self.convlayers):
             x, ind1 = layer(x)
             Ind.append(ind1)
+        
+        num_out_ch = x.shape[1]
+        w_out = x.shape[3]
+        h_out = x.shape[4]
+        x = x.view(batch_size,num_blocks,num_out_ch,frame_per_block,w_out,h_out).contiguous()
+        x = x.permute(0,2,1,3,4,5).contiguous()
+        
+        x = x.view(batch_size,num_out_ch,seq_len,w_out,h_out).contiguous()
+
         
         x = x.permute(0,2,1,3,4)
         x = x.reshape(x.shape[0],x.shape[1],-1)
@@ -144,13 +161,17 @@ class convVAE(nn.Module):
         
         x = x.reshape(x.shape[0],x.shape[1],self.final_f,self.final_size, self.final_size)
         x = x.permute(0,2,1,3,4)
+        
+        x = x.view(batch_size,num_out_ch,num_blocks,frame_per_block,w_out,h_out).contiguous()
+        x = x.permute(0,2,1,3,4,5).contiguous()
+        x = x.view(batch_size * num_blocks,num_out_ch,frame_per_block,w_out,h_out).contiguous()
 
-        
-        
         for n, layer in enumerate(self.deconvlayers):     
             x = layer(x,Ind[self.n_layers-n-1])
-            
-
+        
+        x = x.view(batch_size,num_blocks,1,frame_per_block,w,h).contiguous()
+        x = x.permute(0,2,1,3,4,5)
+        x = x.view(batch_size,1,seq_len,w,h)
 #         x, ind1 = self.ce0(video)
 #         x, ind2 = self.ce1(x)
 #         x = self.dec0(x,ind2)
@@ -170,7 +191,7 @@ def get_data():
 
     # load the training and test datasets
 
-    data_dict = generate_lorenz_data(20, 65, 50, 20, N_stepsinbin = 2, save=False)
+    data_dict = generate_lorenz_data(10, 35, 30, 100, N_stepsinbin = 2, save=False) # [N_trials, N_inits, N_cells, N_steps, N_stepsinbin]
     cells = data_dict['cells']
     traces = data_dict['train_fluor']
     train_data = SyntheticCalciumVideoDataset(traces=traces, cells=cells)
@@ -178,7 +199,7 @@ def get_data():
     
     num_workers = 0
     # how many samples per batch to load
-    batch_size = 20
+    batch_size = 8
 
     # prepare data loaders
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, num_workers=num_workers)
