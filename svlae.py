@@ -25,9 +25,10 @@ class SVLAE_Net(nn.Module):
                                'tau'  : {'value' : 10., 'learnable' : False},
                                'var'  : {'value' : 0.1, 'learnable' : True}},
                  clip_val = 5.0, dropout=0.0, max_norm=200, generator_burn = 0, 
-                 deep_freeze = True, unfreeze = 2000,
+                 deep_unfreeze_step = 2000, ar1_start_step = 4000,
+                 obs_early_stop_step = 2000, obs_continue_step = 8000,
                  do_normalize_factors=True, factor_bias = False, device='cpu'):
-    
+        
         super(SVLAE_Net, self).__init__()
         
         self.input_size           = input_size
@@ -47,10 +48,15 @@ class SVLAE_Net(nn.Module):
         self.generator_burn       = generator_burn
         self.clip_val             = clip_val
         self.max_norm             = max_norm
-        self.deep_freeze          = deep_freeze
-        self.unfreeze             = unfreeze
+        
+        self.deep_unfreeze_step   = deep_unfreeze_step
+        self.obs_early_stop_step  = obs_early_stop_step
+        self.obs_continue_step    = obs_continue_step
+        self.ar1_start_step       = ar1_start_step
+        
         self.do_normalize_factors = do_normalize_factors
         self.factor_bias          = factor_bias
+        
         self.device               = device
         
         self.dropout              = torch.nn.Dropout(dropout)
@@ -66,7 +72,7 @@ class SVLAE_Net(nn.Module):
                                                 clip_val        = self.clip_val,
                                                 device          = self.device)
         
-        self.deep_model           = LFADS_Net(input_size      = self.obs_encoder_size * 2,
+        self.deep_model           = LFADS_Net(input_size      = self.input_size,
                                               g_encoder_size  = self.deep_g_encoder_size,
                                               c_encoder_size  = self.deep_c_encoder_size,
                                               g_latent_size   = self.deep_g_latent_size,
@@ -86,9 +92,14 @@ class SVLAE_Net(nn.Module):
         
         self.initialize_weights()
         
-        if self.deep_freeze:
+        if self.deep_unfreeze_step > 0:
             for p in self.deep_model.parameters():
                 p.requires_grad = False
+                
+        if self.ar1_start_step > 0:
+            for p in self.obs_model.generator.calcium_generator.parameters():
+                p.requires_grad = False
+            self.obs_model.generator.calcium_generator.logvar.requires_grad = True
             
     def forward(self, input):
         
@@ -100,7 +111,7 @@ class SVLAE_Net(nn.Module):
         
         out_obs_enc = self.obs_model.encoder(input, obs_encoder_state)
 
-        input_deep =  out_obs_enc
+        input_deep =  input
         deep_g_encoder_state, deep_c_encoder_state, deep_controller_state = self.deep_model.initialize_hidden_states(input_deep)
         
         self.deep_model.g_posterior_mean, self.deep_model.g_posterior_logvar, out_deep_g_enc, out_deep_c_enc = self.deep_model.encoder(input_deep, (deep_g_encoder_state, deep_c_encoder_state))
@@ -144,7 +155,7 @@ class SVLAE_Net(nn.Module):
                 deep_generator_input = torch.empty(self.batch_size, self.deep_u_latent_size, device=self.device)
                 deep_gen_inputs = None
             
-            obs_u_mean, obs_u_logvar, obs_controller_state = self.obs_model.controller(torch.cat((out_obs_enc[t], spike_state), dim=1), obs_controller_state)
+            obs_u_mean, obs_u_logvar, obs_controller_state = self.obs_model.controller(torch.cat((out_obs_enc[t], obs_state), dim=1), obs_controller_state)
 #             pdb.set_trace()
             self.obs_model.u_posterior_mean   = torch.cat((self.obs_model.u_posterior_mean, obs_u_mean.unsqueeze(1)), dim=1)
             self.obs_model.u_posterior_logvar = torch.cat((self.obs_model.u_posterior_logvar, obs_u_logvar.unsqueeze(1)), dim=1)
@@ -188,17 +199,45 @@ class SVLAE_Net(nn.Module):
             self.deep_model.initialize_weights()
             self.obs_model.initialize_weights()
     
-    #------------------------------------------------------------------------------
-    #------------------------------------------------------------------------------
-            
-    def unfreeze_parameters(self, step, optimizer, scheduler):
-        if step >= self.unfreeze and self.deep_freeze:
-            self.deep_freeze = False
-            optimizer.add_param_group({'params' : [p for p in self.parameters() if not p.requires_grad],
+    def change_parameter_grad_status(self, step, optimizer, scheduler, loading_checkpoint=False):
+        
+        def step_condition(run_step, status_step, loading_checkpoint):
+            if loading_checkpoint:
+                return run_step >= status_step
+            else:
+                return run_step == status_steps
+        
+        if step_condition(step, self.deep_unfreeze_step, loading_checkpoint):
+            print('Unfreezing deep model parameters', flush=True)
+            optimizer.add_param_group({'params' : [p for p in self.deep_model.parameters() if not p.requires_grad],
                                        'lr' : optimizer.param_groups[0]['lr']})
             scheduler.min_lrs.append(scheduler.min_lrs[0])
-            for p in self.parameters():
+            for p in self.deep_model.parameters():
                 p.requires_grad_(True)
+                
+        if step_condition(step, self.obs_early_stop_step, loading_checkpoint):
+            print('Stopping observation model parameters', flush=True)
+            del optimizer.param_groups[0]
+            del scheduler.min_lrs[0]
+            for p in self.obs_model.parameters():
+                p.requires_grad_(False)
+                
+        if step_condition(step, self.obs_continue_step, loading_checkpoint):
+            print('Continuing observation model parameters', flush=True)
+            optimizer.add_param_group({'params' : [p for p in self.obs_model.parameters() if not p.requires_grad],
+                                       'lr' : optimizer.param_groups[0]['lr']})
+            scheduler.min_lrs.append(scheduler.min_lrs[0])
+            for p in self.obs_model.parameters():
+                p.requires_grad_(True)
+                
+        if step_condition(step, self.ar1_start_step, loading_checkpoint):
+            print('Starting AR1 model parameters', flush=True)
+            optimizer.add_param_group({'params' : [p for p in self.obs_model.generator.calcium_generator.parameters() if not p.requires_grad],
+                                       'lr' : optimizer.param_groups[0]['lr']})
+            scheduler.min_lrs.append(scheduler.min_lrs[0])
+            for p in self.obs_model.generator.calcium_generator.parameters():
+                p.requires_grad_(True)
+        
         return optimizer, scheduler
     
     #------------------------------------------------------------------------------
@@ -243,11 +282,11 @@ class Calcium_Net(nn.Module):
                                                          clip_val        = self.clip_val,
                                                          dropout         = dropout)
         
-        self.generator            = Calcium_Generator(input_size  = self.u_latent_size + self.factor_size,
-                                                      output_size = self.input_size,
-                                                      parameters  = parameters,
-                                                      dropout     = dropout,
-                                                      device      = self.device)
+        self.generator       = Calcium_Generator(input_size  = self.u_latent_size + self.factor_size,
+                                                 output_size = self.input_size,
+                                                 parameters  = parameters,
+                                                 dropout     = dropout,
+                                                 device      = self.device)
         
         # Initialize learnable biases
         self.encoder_init    = nn.Parameter(torch.zeros(2, self.encoder_size))
@@ -385,7 +424,6 @@ class Spike_Generator(nn.Module):
     def forward(self, input):
 #         pdb.set_trace()
         return torch.clamp(self.fc_logspike(self.dropout(input)).exp() - 1, min=0.0)
-    
     
 class AR1_Calcium(nn.Module):
     

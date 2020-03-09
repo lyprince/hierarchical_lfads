@@ -67,7 +67,6 @@ class LFADS_Net(nn.Module):
         self.do_normalize_factors = do_normalize_factors
         self.factor_bias          = factor_bias
         self.device               = device
-        self.deep_freeze          = deep_freeze
         
         self.dropout              = torch.nn.Dropout(dropout)
 
@@ -269,6 +268,9 @@ class LFADS_Net(nn.Module):
                 
     def normalize_factors(self):
         self.generator.fc_factors.weight.data = F.normalize(self.generator.fc_factors.weight.data, dim=1)
+        
+    def change_parameter_grad_status(self, step, optimizer, scheduler):
+        return optimizer, scheduler
     
 class LFADS_SingleSession_Net(LFADS_Net):
     
