@@ -67,6 +67,7 @@ class LFADS_Net(nn.Module):
         self.do_normalize_factors = do_normalize_factors
         self.factor_bias          = factor_bias
         self.device               = device
+        self.deep_freeze          = deep_freeze
         
         self.dropout              = torch.nn.Dropout(dropout)
 
@@ -141,9 +142,11 @@ class LFADS_Net(nn.Module):
         
         # Initialize hidden states
         g_encoder_state, c_encoder_state, controller_state = self.initialize_hidden_states(input) 
+
         
         # Encode input and calculate and calculate generator initial condition variational posterior distribution
         self.g_posterior_mean, self.g_posterior_logvar, out_gru_g_enc, out_gru_c_enc = self.encoder(input, (g_encoder_state, c_encoder_state))
+        
 
         # Sample generator state
         generator_state = self.fc_genstate(self.sample_gaussian(self.g_posterior_mean, self.g_posterior_logvar))
@@ -268,9 +271,6 @@ class LFADS_Net(nn.Module):
                 
     def normalize_factors(self):
         self.generator.fc_factors.weight.data = F.normalize(self.generator.fc_factors.weight.data, dim=1)
-        
-    def change_parameter_grad_status(self, step, optimizer, scheduler):
-        return optimizer, scheduler
     
 class LFADS_SingleSession_Net(LFADS_Net):
     
