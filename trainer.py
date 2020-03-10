@@ -79,9 +79,8 @@ class RunManager():
                     # Row-normalise fc_factors (See bullet-point 11 of section 1.9 of online methods)
                     self.model.normalize_factors()
                     
-                if self.model.deep_freeze:
-                    self.optimizer, self.scheduler = self.model.unfreeze_parameters(self.step, self.optimizer, self.scheduler)
-                    
+                self.optimizer, self.scheduler = self.model.change_parameter_grad_status(self.step, self.optimizer, self.scheduler)
+                                        
                 self.step += 1
                 
             if torch.isnan(loss.data):
@@ -252,8 +251,12 @@ class RunManager():
         if os.path.exists(self.save_loc + 'checkpoints/' + input_filename + '.pth'):
             state_dict = torch.load(self.save_loc + 'checkpoints/' + input_filename + '.pth')
             self.model.load_state_dict(state_dict['net'])
+            print(state_dict['run_manager']['step'])
             if len(state_dict['opt']['param_groups']) > 1:
-                self.optimizer, self.scheduler = self.model.unfreeze_parameters(state_dict['run_manager']['step'], self.optimizer, self.scheduler)
+                self.optimizer, self.scheduler = self.model.unfreeze_deep_parameters(state_dict['run_manager']['step'], self.optimizer, self.scheduler)
+                self.optimizer, self.scheduler = self.model.early_stop_obs_parameters(state_dict['run_manager']['step'], self.optimizer, self.scheduler)
+                self.optimizer, self.scheduler = self.model.continue_obs_parameters(state_dict['run_manager']['step'], self.optimizer, self.scheduler)
+#                 pdb.set_trace()
             self.optimizer.load_state_dict(state_dict['opt'])
             self.scheduler.load_state_dict(state_dict['sched'])
 

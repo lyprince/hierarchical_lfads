@@ -12,7 +12,7 @@ from orion.client import report_results
 
 from trainer import RunManager
 from scheduler import LFADS_Scheduler
-from objective import SVLAE_Loss, LogLikelihoodPoisson, LogLikelihoodPoissonSimplePlusL1, LogLikelihoodGaussian
+from objective import SVLAE_Loss, LogLikelihoodPoisson, LogLikelihoodPoissonSimplePlusL1, LogLikelihoodPoissonSimple, LogLikelihoodGaussian
 from svlae import SVLAE_Net
 from utils import read_data, load_parameters
 from plotter import Plotter
@@ -75,7 +75,7 @@ def main():
         deep_start = int(args.deep_start_p * args.deep_start_p_scale * hyperparams['objective']['kl_obs']['schedule_dur'])
         hyperparams['objective']['kl_deep']['schedule_start'] = deep_start
         hyperparams['objective']['l2']['schedule_start'] = deep_start
-        hyperparams['model']['unfreeze'] = deep_start
+        hyperparams['model']['deep_unfreeze_step'] = deep_start
         orion_hp_string += 'deep_start= %i\n'%deep_start
         
     if args.l2_gen_scale or args.log10_l2_gen_scale:
@@ -99,8 +99,8 @@ def main():
     mhp_list = [key.replace('size', '').replace('deep', 'd').replace('obs', 'o').replace('_', '')[:4] + str(val) for key, val in hyperparams['model'].items() if 'size' in key]
     mhp_list.sort()
     hyperparams['run_name'] = '_'.join(mhp_list)
-    orion_hp_string = orion_hp_string.replace('\n', '-').replace(' ', '')
-    orion_hp_string = '_orion('+orion_hp_string+')'
+    orion_hp_string = orion_hp_string.replace('\n', '-').replace(' ', '').replace('=', '')
+    orion_hp_string = '_orion-'+orion_hp_string
     hyperparams['run_name'] += orion_hp_string
     save_loc = '%s/%s/%s/%s/'%(args.output_dir, data_name, model_name, hyperparams['run_name'])
 
@@ -126,9 +126,10 @@ def main():
     
     objective = SVLAE_Loss(loglikelihood_obs        = loglikelihood_obs,
                            loglikelihood_deep       = loglikelihood_deep,
-                           loss_weight_dict         = {'kl_deep': hyperparams['objective']['kl_deep'],
-                                                       'kl_obs' : hyperparams['objective']['kl_obs'],
-                                                       'l2'     : hyperparams['objective']['l2']},
+                           loss_weight_dict         = {'kl_deep'    : hyperparams['objective']['kl_deep'],
+                                                       'kl_obs'     : hyperparams['objective']['kl_obs'],
+                                                       'l2'         : hyperparams['objective']['l2'],
+                                                       'recon_deep' : hyperparams['objective']['recon_deep']},
                            l2_con_scale             = hyperparams['objective']['l2_con_scale'],
                            l2_gen_scale             = hyperparams['objective']['l2_gen_scale']).to(device)
     
@@ -152,8 +153,10 @@ def main():
                       do_normalize_factors  = hyperparams['model']['normalize_factors'],
                       factor_bias           = hyperparams['model']['factor_bias'],
                       max_norm              = hyperparams['model']['max_norm'],
-                      deep_freeze           = hyperparams['model']['deep_freeze'],
-                      unfreeze              = hyperparams['model']['unfreeze'],
+                      deep_unfreeze_step    = hyperparams['model']['deep_unfreeze_step'],
+                      obs_early_stop_step   = hyperparams['model']['obs_early_stop_step'],
+                      obs_continue_step     = hyperparams['model']['obs_continue_step'],
+                      ar1_start_step        = hyperparams['model']['ar1_start_step'],
                       obs_params            = hyperparams['model']['obs'],
                       device                = device).to(device)
     
@@ -229,6 +232,20 @@ def main():
     report_results([dict(name= 'valid_loss',
                          type= 'objective',
                          value= run_manager.best)])
+    
+    fig_folder = save_loc + 'figs/'
+    
+    if os.path.exists(fig_folder):
+        os.system('rm -rf %s'%fig_folder)
+    os.mkdir(fig_folder)
+    
+    from matplotlib.figure import Figure
+    import matplotlib
+    matplotlib.use('Agg')
+    fig_dict = plotter['valid'].plot_summary(model = run_manager.model, dl=run_manager.valid_dl)
+    for k, v in fig_dict.items():
+        if type(k) == Figure:
+            v.savefig(fig_folder+k+'.svg')
 
 if __name__ == '__main__':
     main()

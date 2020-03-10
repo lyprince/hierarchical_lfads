@@ -51,7 +51,8 @@ class SVLAE_Loss(Base_Loss):
     def __init__(self, loglikelihood_obs, loglikelihood_deep,
                  loss_weight_dict = {'kl_obs' : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 0,    'max' : 1.0, 'min' : 0.0},
                                      'kl_deep': {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 2000, 'max' : 1.0, 'min' : 0.0},
-                                     'l2'     : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 2000, 'max' : 1.0, 'min' : 0.0}},
+                                     'l2'     : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 2000, 'max' : 1.0, 'min' : 0.0},
+                                     'recon_deep' : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 2000, 'max' : 1.0, 'min' : 0.0}},
                  l2_con_scale=0.0, l2_gen_scale=0.0):
         
         super(SVLAE_Loss, self).__init__(loss_weight_dict=loss_weight_dict, l2_con_scale=l2_con_scale, l2_gen_scale=l2_gen_scale)
@@ -62,10 +63,12 @@ class SVLAE_Loss(Base_Loss):
         kl_obs_weight = self.loss_weights['kl_obs']['weight']
         kl_deep_weight = self.loss_weights['kl_deep']['weight']
         l2_weight = self.loss_weights['l2']['weight']
+        recon_deep_weight = self.loss_weights['recon_deep']['weight']
 #         pdb.set_trace()
 
         recon_obs_loss  = -self.loglikelihood_obs(x_orig, x_recon['data'], model.obs_model.generator.calcium_generator.logvar)
         recon_deep_loss = -self.loglikelihood_deep(x_recon['spikes'].permute(1, 0, 2), x_recon['rates'].permute(1, 0, 2))
+        recon_deep_loss = recon_deep_weight * recon_deep_loss
 
         kl_obs_loss = kl_obs_weight * kldiv_gaussian_gaussian(post_mu   = model.obs_model.u_posterior_mean,
                                                                post_lv  = model.obs_model.u_posterior_logvar,
@@ -145,6 +148,15 @@ class LogLikelihoodPoisson(nn.Module):
 #         pdb.set_trace()
         return loglikelihood_poisson(k, lam*self.dt)
 
+class LogLikelihoodPoissonSimple(nn.Module):
+    
+    def __init__(self, dt=1.0, device='cpu'):
+        super(LogLikelihoodPoissonSimple, self).__init__()
+        self.dt = dt
+    
+    def forward(self, k, lam):
+        return loglikelihood_poissonsimple(k, lam*self.dt)
+
 class LogLikelihoodPoissonSimplePlusL1(nn.Module):
     
     def __init__(self, dt=1.0, device='cpu'):
@@ -168,6 +180,9 @@ def loglikelihood_poisson(k, lam):
 
 def loglikelihood_poissonsimple_plusl1(k, lam):
     return (k * torch.log(lam) - lam - torch.abs(k)).mean(dim=0).sum()
+
+def loglikelihood_poissonsimple(k, lam):
+    return (k * torch.log(lam) - lam).mean(dim=0).sum()
 
 class LogLikelihoodGaussian(nn.Module):
     def __init__(self):

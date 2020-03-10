@@ -125,11 +125,23 @@ def main():
                                 min_lr         = hyperparams['scheduler']['lr_min'])
     
     TIME = torch._np.arange(0, num_steps*data_dict['dt'], data_dict['dt'])
+    
+    train_truth = {}
+    if 'train_rates' in data_dict.keys():
+        train_truth['rates'] = data_dict['train_rates']
+    if 'train_latent' in data_dict.keys():
+        train_truth['latent'] = data_dict['train_latent']
+        
+    valid_truth = {}
+    if 'valid_rates' in data_dict.keys():
+        valid_truth['rates'] = data_dict['valid_rates']
+    if 'valid_latent' in data_dict.keys():
+        valid_truth['latent'] = data_dict['valid_latent']
+        
+    train_truth = {'rates' : data_dict['train_truth']}
 
-    plotter = {'train' : Plotter(time=TIME, truth={'rates'   : data_dict['train_truth'],
-                                                   'latent'  : data_dict['train_latent']}),
-               'valid' : Plotter(time=TIME, truth={'rates'   : data_dict['valid_truth'],
-                                                   'latent'  : data_dict['valid_latent']})}
+    plotter = {'train' : Plotter(time=TIME, truth=train_truth),
+               'valid' : Plotter(time=TIME, truth=valid_truth)}
     
     if args.use_tensorboard:
         import importlib

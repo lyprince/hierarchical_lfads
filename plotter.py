@@ -72,7 +72,7 @@ class Plotter(object):
                 figs_dict['truth_factors'] = self.plot_traces(pred_factors, true_factors, num_traces=true_factors.shape[-1], ncols=1)
                 figs_dict['truth_factors'].suptitle('Reconstructed vs ground-truth factors')
             else:
-                figs_dict['factors'] = self.plot_factors(factors.cpu().numpy())
+                figs_dict['factors'] = self.plot_factors(factors.mean(dim=1).cpu().numpy())
                 
             if 'spikes' in self.truth.keys():
                 recon_spikes = recon['spikes'].mean(dim=1).cpu().numpy()
@@ -81,10 +81,10 @@ class Plotter(object):
                 figs_dict['truth_spikes'].suptitle('Reconstructed vs ground-truth rate function')
         
         else:
-            figs_dict['factors'] = self.plot_factors(factors)
+            figs_dict['factors'] = self.plot_factors(factors.mean(dim=1).cpu().numpy())
         
         if inputs is not None:
-            figs_dict['inputs'] = self.plot_inputs(inputs)
+            figs_dict['inputs'] = self.plot_inputs(inputs.mean(dim=1).cpu().numpy())
         return figs_dict
     
     #------------------------------------------------------------------------------W
@@ -150,7 +150,7 @@ class Plotter(object):
             - figure
         '''
         
-        batch_size, steps_size, factors_size = factors.shape
+        steps_size, factors_size = factors.shape
         
         nrows = min(max_in_col, factors_size)
         ncols = int(np.ceil(factors_size/max_in_col))
@@ -158,7 +158,6 @@ class Plotter(object):
         fig, axs = plt.subplots(nrows=nrows, ncols=ncols, figsize=figsize)
 
         axs = np.ravel(axs)
-        factors = factors.mean(dim=0).cpu().numpy()
         fmin = factors.min()
         fmax = factors.max()
         
@@ -197,18 +196,17 @@ class Plotter(object):
             - fig_width (int) : figure width in inches
             - fig_height (int) : figure height in inches
         '''
-        batch_size, steps_size, inputs_size = inputs.shape
+        steps_size, inputs_size = inputs.shape
     
-        figsize = (fig_width, fig_height*len(inputs_size))
-        fig, axs = plt.subplots(nrows=len(inputs_size), figsize=figsize)
+        figsize = (fig_width, fig_height*inputs_size)
+        fig, axs = plt.subplots(nrows=inputs_size, figsize=figsize)
         fig.suptitle('Input to the generator for a sampled trial', y=1.2)
-        inputs = inputs.mean(dim=0).cpu().numpy()
         for jx in range(inputs_size):
             if inputs_size > 1:
                 plt.sca(axs[jx])
             else:
                 plt.sca(axs)
-            plt.plot(time, inputs[:, jx])
+            plt.plot(self.time, inputs[:, jx])
             plt.xlabel('time (s)')
         return fig
     
