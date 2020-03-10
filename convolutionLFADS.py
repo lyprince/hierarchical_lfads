@@ -15,7 +15,7 @@ from torchvision import datasets
 import torchvision.transforms as transforms
 from torch.autograd import Variable
 
-from lfads import LFADS_SingleSession_Net
+from lfads import LFADS_Net
 from objective import *
 from scheduler import LFADS_Scheduler
 
@@ -35,12 +35,14 @@ class conv_block(nn.Module):# *args, **kwargs
         
         self.conv1 = nn.Conv3d(in_f, out_f, 
                   kernel_size=3, 
-                  padding=1)
+                  padding=1,
+                  dilation = (1,1,1))
         self.relu1 = nn.ReLU()
         self.conv2 = nn.Conv3d(in_f, out_f, 
                   kernel_size=3, 
-                  padding=1)
-        self.pool1 = nn.MaxPool3d(kernel_size=(1,2,2),
+                  padding=1,
+                  dilation = 1)
+        self.pool1 = nn.MaxPool3d(kernel_size=(1,4,4),
                      return_indices=True)
         self.relu2 = nn.ReLU()
         
@@ -58,17 +60,17 @@ class deconv_block(nn.Module):
     def __init__(self, in_f, out_f):
         super(deconv_block,self).__init__()
         
-        self.unpool1 = nn.MaxUnpool3d(kernel_size=(1,2,2))
+        self.unpool1 = nn.MaxUnpool3d(kernel_size=(1,4,4))
         
         self.deconv1 = nn.ConvTranspose3d(in_channels=in_f,
                                           out_channels=out_f,
                                           kernel_size=3,
                                           padding=1, 
-                                         )
+                                          dilation = (1,1,1))
         self.relu1 = nn.ReLU()
         
     def forward(self,x,ind):
-        
+#         print(x.shape,ind.shape)
         x = self.unpool1(x,ind)
         x = self.deconv1(x)
         x = self.relu1(x)
@@ -89,8 +91,8 @@ class convVAE(nn.Module):
         self.n_layers = 2#3
         
         self.video_dim_space = 128
-        self.video_dim_time = 10
-        self.final_size = 32#16#
+        self.video_dim_time = 50
+        self.final_size = 8#
         self.final_f = 32#64#20#3
         
         self.convlayers = nn.ModuleList()
@@ -108,8 +110,8 @@ class convVAE(nn.Module):
 
 #         self.dec1 = deconv_block(out_f2,out_f1)
 #         self.dec2 = deconv_block(out_f1,in_f) 
-
-        self.lfads = LFADS_SingleSession_Net(self.final_size * self.final_size * self.final_f, factor_size = 4,
+        self.fc1 = nn.Linear(self.final_size*self.final_size*self.final_f,64)
+        self.lfads = LFADS_Net(64, factor_size = 4, #self.final_size * self.final_size * self.final_f
                  g_encoder_size  = 64, c_encoder_size = 64,
                  g_latent_size   = 64, u_latent_size  = 1,
                  controller_size = 64, generator_size = 64,
@@ -120,7 +122,7 @@ class convVAE(nn.Module):
                                   'tau'  : {'value': 10,  'learnable' : True}}},
                  clip_val=5.0, dropout=0.0, max_norm = 200, deep_freeze = False,
                  do_normalize_factors=True, device = device)
-
+        self.fc2 = nn.Linear(64,self.final_size*self.final_size*self.final_f)
         
     def forward(self,video):
         frame_per_block = 10
@@ -134,26 +136,38 @@ class convVAE(nn.Module):
         
 
         Ind = list()
+        conv_tic = time.time()
         for n, layer in enumerate(self.convlayers):
             x, ind1 = layer(x)
             Ind.append(ind1)
         
+
+
         num_out_ch = x.shape[1]
         w_out = x.shape[3]
         h_out = x.shape[4]
         x = x.view(batch_size,num_blocks,num_out_ch,frame_per_block,w_out,h_out).contiguous()
         x = x.permute(0,2,1,3,4,5).contiguous()
-        
         x = x.view(batch_size,num_out_ch,seq_len,w_out,h_out).contiguous()
 
         
         x = x.permute(0,2,1,3,4)
+        
         x = x.reshape(x.shape[0],x.shape[1],-1)
+        x = self.fc1(x.view(batch_size,seq_len,w_out*h_out*num_out_ch))
+        conv_toc = time.time()
         
         x = x.permute(1,0,2)
-        r, (factors, gen_inputs) = self.lfads(x)
-        x = r['data']
+        lfads_tic = time.time()
+#         r, (factors, gen_inputs) = self.lfads(x)
+        (factors, gen_inputs) = self.lfads(x)
+        lfads_toc = time.time()
+        x = factors
+        print(x.shape)
         x = x.permute(1,0,2)
+        x = self.fc2(x)
+        
+        print(conv_toc-conv_tic,lfads_toc - lfads_tic)
         # call LFADS here:
         # x should be reshaped for LFADS [time x batch x cells]:
         # 
@@ -198,7 +212,7 @@ def get_data():
     
     num_workers = 0
     # how many samples per batch to load
-    batch_size = 8
+    batch_size = 30
 
     # prepare data loaders
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, num_workers=num_workers)
@@ -261,6 +275,12 @@ def train_convVAE(train_loader,test_loader,n_epochs): #model,
     device     = 'cuda' if torch.cuda.is_available() else 'cpu';
     model = convVAE().to(device)
     lfads = model.lfads
+    
+    for ix, (name, param) in enumerate(model.named_parameters()):
+        print(ix, name, list(param.shape), param.numel(), param.requires_grad)
+#         total_params += param.numel()
+        
+
     # number of epochs to train the model
 #     n_epochs = 30
 #     train_loader, test_loader = get_data()
