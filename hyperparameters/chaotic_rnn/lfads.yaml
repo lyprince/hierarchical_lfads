@@ -47,7 +47,7 @@ model:
     u:
       mean:
         value: 0.0
-        learnable: true
+        learnable: false
       var:
         value: 0.1
         learnable: true

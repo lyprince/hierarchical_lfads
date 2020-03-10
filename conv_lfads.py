@@ -65,8 +65,8 @@ class Conv3d_LFADS_Net(nn.Module):
         num_blocks = int(seq_len/frame_per_block)
         
         x = x.view(batch_size,num_ch,num_blocks,frame_per_block,w,h).contiguous()
-        x = x.permute(0,2,1,3,4,5).contiguous()
-        x = x.view(batch_size * num_blocks,num_ch,frame_per_block,w,h).contiguous()
+        x = x.permute(0,2,1,3,4, 5).contiguous()
+        x = x.view(batch_size * num_blocks, num_ch, frame_per_block, w, h).contiguous()
         
 
         Ind = list()
@@ -77,31 +77,32 @@ class Conv3d_LFADS_Net(nn.Module):
         num_out_ch = x.shape[1]
         w_out = x.shape[3]
         h_out = x.shape[4]
-        x = x.view(batch_size,num_blocks,num_out_ch,frame_per_block,w_out,h_out).contiguous()
-        x = x.permute(0,2,1,3,4,5).contiguous()
+        x = x.view(batch_size, num_blocks, num_out_ch, frame_per_block, w_out, h_out).contiguous()
+        x = x.permute(0, 2, 1, 3, 4, 5).contiguous()
         
-        x = x.view(batch_size,num_out_ch,seq_len,w_out,h_out).contiguous()
+        x = x.view(batch_size, num_out_ch, seq_len, w_out, h_out).contiguous()
 
         
-        x = x.permute(0,2,1,3,4)
+        x = x.permute(0, 2, 1, 3, 4)
         x = x.reshape(x.shape[0],x.shape[1],-1)
         
-        x = x.permute(1,0,2)
+        x = x.permute(1, 0, 2)
         factors, gen_inputs = self.lfads(x)
         x = factors
-        x = x.permute(1,0,2)
+        x = x.permute(1, 0, 2)
+        x = 
 
         # call LFADS here:
         # x should be reshaped for LFADS [time x batch x cells]:
         # 
         # LFADS output should be also reshaped back for the conv decoder
         
-        x = x.reshape(x.shape[0],x.shape[1],self.final_f,self.final_size, self.final_size)
-        x = x.permute(0,2,1,3,4)
+        x = x.reshape(x.shape[0], x.shape[1], self.final_f, self.final_size, self.final_size)
+        x = x.permute(0, 2, 1, 3, 4)
         
-        x = x.view(batch_size,num_out_ch,num_blocks,frame_per_block,w_out,h_out).contiguous()
-        x = x.permute(0,2,1,3,4,5).contiguous()
-        x = x.view(batch_size * num_blocks,num_out_ch,frame_per_block,w_out,h_out).contiguous()
+        x = x.view(batch_size, num_out_ch, num_blocks, frame_per_block, w_out, h_out).contiguous()
+        x = x.permute(0, 2, 1, 3, 4, 5).contiguous()
+        x = x.view(batch_size * num_blocks, num_out_ch, frame_per_block, w_out, h_out).contiguous()
 
         for n, layer in enumerate(self.deconvlayers):     
             x = layer(x,Ind[self.n_layers-n-1])
@@ -118,14 +119,18 @@ class Conv3d_Block(nn.Module):
         
         self.conv1 = nn.Conv3d(in_f, out_f, 
                                kernel_size=3, 
-                               padding=1)
+                               padding=1,
+                               dilation = (1,1,1))
+        
         self.relu1 = nn.ReLU()
-        self.conv2 = nn.Conv3d(in_channels= in_f,
-                               out_channels= out_f, 
-                               kernel_size=3, 
-                               padding=1)
-        self.pool1 = nn.MaxPool3d(kernel_size=(1,2,2),
-                                  return_indices=True)
+        
+        self.conv2 = nn.Conv3d(in_f, out_f, 
+                               kernel_size= 3, 
+                               padding= 1,
+                               dilation= 1)
+        
+        self.pool1 = nn.MaxPool3d(kernel_size= (1, 4, 4),
+                                  return_indices= True)
         self.relu2 = nn.ReLU()
         
     def forward(self,x):
@@ -140,12 +145,13 @@ class ConvTranspose3d_Block(nn.Module):
     def __init__(self, in_f, out_f):
         super(ConvTranspose3d_Block, self).__init__()
         
-        self.unpool1 = nn.MaxUnpool3d(kernel_size=(1,2,2))
+        self.unpool1 = nn.MaxUnpool3d(kernel_size= (1, 4, 4))
         
-        self.deconv1 = nn.ConvTranspose3d(in_channels=in_f,
-                                          out_channels=out_f,
-                                          kernel_size=3,
-                                          padding=1)
+        self.deconv1 = nn.ConvTranspose3d(in_channels= in_f,
+                                          out_channels= out_f,
+                                          kernel_size= 3,
+                                          padding= 1, 
+                                          dilation= (1,1,1))
         self.relu1 = nn.ReLU()
         
     def forward(self, x, ind):
