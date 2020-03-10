@@ -179,7 +179,6 @@ class convVAE(nn.Module):
         
 
 #         return v_p
-        return x, factors
 
 
 def get_data():
