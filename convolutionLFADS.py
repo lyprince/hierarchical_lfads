@@ -94,6 +94,8 @@ class convVAE(nn.Module):
         self.video_dim_time = 50
         self.final_size = 8#
         self.final_f = 32#64#20#3
+        self.factor_size = 4 # LFADS number of factors
+        self.bottleneck_size = 64
         
         self.convlayers = nn.ModuleList()
         for n in range(0,self.n_layers):
@@ -110,11 +112,11 @@ class convVAE(nn.Module):
 
 #         self.dec1 = deconv_block(out_f2,out_f1)
 #         self.dec2 = deconv_block(out_f1,in_f) 
-        self.fc1 = nn.Linear(self.final_size*self.final_size*self.final_f,64)
-        self.lfads = LFADS_Net(64, factor_size = 4, #self.final_size * self.final_size * self.final_f
-                 g_encoder_size  = 64, c_encoder_size = 64,
-                 g_latent_size   = 64, u_latent_size  = 1,
-                 controller_size = 64, generator_size = 64,
+        self.fc1 = nn.Linear(self.final_size*self.final_size*self.final_f,self.bottleneck_size)
+        self.lfads = LFADS_Net(self.bottleneck_size, factor_size = self.factor_size, #self.final_size * self.final_size * self.final_f
+                 g_encoder_size  = 64, c_encoder_size = 0,
+                 g_latent_size   = 64, u_latent_size  = 0,
+                 controller_size = 0, generator_size = 64,
                  prior = {'g0' : {'mean' : {'value': 0.0, 'learnable' : True},
                                   'var'  : {'value': 0.1, 'learnable' : False}},
                           'u'  : {'mean' : {'value': 0.0, 'learnable' : False},
@@ -122,7 +124,7 @@ class convVAE(nn.Module):
                                   'tau'  : {'value': 10,  'learnable' : True}}},
                  clip_val=5.0, dropout=0.0, max_norm = 200, deep_freeze = False,
                  do_normalize_factors=True, device = device)
-        self.fc2 = nn.Linear(64,self.final_size*self.final_size*self.final_f)
+        self.fc2 = nn.Linear(self.factor_size,self.final_size*self.final_size*self.final_f)
         
     def forward(self,video):
         frame_per_block = 10
@@ -136,7 +138,7 @@ class convVAE(nn.Module):
         
 
         Ind = list()
-        conv_tic = time.time()
+#         conv_tic = time.time()
         for n, layer in enumerate(self.convlayers):
             x, ind1 = layer(x)
             Ind.append(ind1)
@@ -155,19 +157,18 @@ class convVAE(nn.Module):
         
         x = x.reshape(x.shape[0],x.shape[1],-1)
         x = self.fc1(x.view(batch_size,seq_len,w_out*h_out*num_out_ch))
-        conv_toc = time.time()
+#         conv_toc = time.time()
         
         x = x.permute(1,0,2)
-        lfads_tic = time.time()
+#         lfads_tic = time.time()
 #         r, (factors, gen_inputs) = self.lfads(x)
         (factors, gen_inputs) = self.lfads(x)
-        lfads_toc = time.time()
+#         lfads_toc = time.time()
         x = factors
-        print(x.shape)
         x = x.permute(1,0,2)
         x = self.fc2(x)
         
-        print(conv_toc-conv_tic,lfads_toc - lfads_tic)
+#         print(conv_toc-conv_tic,lfads_toc - lfads_tic)
         # call LFADS here:
         # x should be reshaped for LFADS [time x batch x cells]:
         # 
@@ -193,18 +194,31 @@ class convVAE(nn.Module):
         
 
 #         return v_p
+        return x, factors
 
 
 def get_data():
     
     from synthetic_data import generate_lorenz_data, SyntheticCalciumVideoDataset
+    import numpy as np
+    import torch
+    from tempfile import mkdtemp
+    import os.path as path
+    import time
 
+    filename_train = path.join(mkdtemp(), 'newfile_train.dat')
+    filename_test = path.join(mkdtemp(), 'newfile_test.dat')
     # convert data to torch.FloatTensor
     transform = transforms.ToTensor()
 
     # load the training and test datasets
-
-    data_dict = generate_lorenz_data(10, 35, 30, 100, N_stepsinbin = 2, save=False) # [N_trials, N_inits, N_cells, N_steps, N_stepsinbin]
+    N_trials = 10
+    N_inits = 35
+    N_cells = 30
+    N_steps = 100
+    N_stepsinbin = 2
+    
+    data_dict = generate_lorenz_data(N_trials, N_inits, N_cells, N_steps, N_stepsinbin, save=False) # [N_trials, N_inits, N_cells, N_steps, N_stepsinbin]
     cells = data_dict['cells']
     traces = data_dict['train_fluor']
     train_data = SyntheticCalciumVideoDataset(traces=traces, cells=cells)
@@ -212,13 +226,30 @@ def get_data():
     
     num_workers = 0
     # how many samples per batch to load
-    batch_size = 30
+    batch_size = 35
 
     # prepare data loaders
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, num_workers=num_workers)
     test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, num_workers=num_workers)
+    
+    fp_train = np.memmap(filename_train, dtype='float32', mode='w+', shape=(batch_size,8,int(N_steps/N_stepsinbin),128,128))
+    i = 0
+    tic = time.time()
+    for data in train_loader:
+        videos = data
+        fp_train[:,i,:,:,:] = np.squeeze(videos[:])
+        i += 1
+        
+    fp_test = np.memmap(filename_test, dtype='float32', mode='w+', shape=(batch_size,8,int(N_steps/N_stepsinbin),128,128))
+    i = 0
+    tic = time.time()
+    for data in test_loader:
+        print(i)
+        videos = data
+        fp_test[:,i,:,:,:] = np.squeeze(videos[:])
+        i += 1
 
-    return train_data, train_loader, test_loader
+    return fp_train, fp_test #train_data, train_loader, test_loader
 
 class convLFADS_loss(nn.Module):
     def __init__(self,
@@ -270,11 +301,11 @@ class convLFADS_loss(nn.Module):
     
     
     
-def train_convVAE(train_loader,test_loader,n_epochs): #model,
+def train_convVAE(fp_train,fp_test,n_epochs): #model,
     
     device     = 'cuda' if torch.cuda.is_available() else 'cpu';
     model = convVAE().to(device)
-    lfads = model.lfads
+    lfads = model.lfads.to(device)
     
     for ix, (name, param) in enumerate(model.named_parameters()):
         print(ix, name, list(param.shape), param.numel(), param.requires_grad)
@@ -312,61 +343,82 @@ def train_convVAE(train_loader,test_loader,n_epochs): #model,
         # train the model #
         ###################
         i = 0
-        for data in train_loader:
+#         tic_train = time.time()
+        num_step = fp_train.shape[1]
+        videos = torch.zeros((35,1,50,128,128)).to(device)
+        for i in range(num_step):#for data in train_loader:
             
             # _ stands in for labels, here
             # no need to flatten images
-            videos = data.to(device)
+#             videos = data.to(device)
+            videos[:,0,:,:,:] = torch.Tensor(fp_train[:,i,:,:,:]).to(device)
             # clear the gradients of all optimized variables
             optimizer.zero_grad()
             # forward pass: compute predicted outputs by passing inputs to the model
+            tic_forw = time.time()
             outputs,_ = model(videos)
+            toc_forw = time.time()
+#             print(toc_forw - tic_forw)
             # calculate the loss
             recon_loss, kl_loss, l2_loss = criterion(outputs, videos,lfads)
             loss = recon_loss + kl_loss + l2_loss
             # backward pass: compute gradient of the loss with respect to model parameters
+            tic_backw = time.time()
             loss.backward()
+            toc_backw = time.time()
+#             print(toc_forw - tic_forw,toc_backw - tic_backw)
             # perform a single optimization step (parameter update)
+            tic_optim = time.time()
             optimizer.step()
+            toc_optim = time.time()
+#             print(toc_optim - tic_optim)
             # update running training loss
             train_loss += loss.item()*videos.size(0)
             i += 1
-            
+#         toc_train = time.time()
+#         print(toc_train - tic_train)   
         writer_train.add_scalar('total/loss', train_loss, epoch)
-         
+        
         test_loss = 0.0
-        for data_test in test_loader:
-            
-#             print(i)
-            # _ stands in for labels, here
-            # no need to flatten images
-            videos_test = data_test.to(device)
-            # forward pass: compute predicted outputs by passing inputs to the model
-            outputs_test,_ = model(videos_test)
-            # calculate the loss
-            recon_loss_test, kl_loss_test, l2_loss_test = criterion(outputs_test, videos_test,lfads)
-            loss_test = recon_loss_test + kl_loss_test + l2_loss_test
+#         tic_val = time.time()
+        with torch.no_grad():
+            num_step = fp_test.shape[1]
+            videos_test = torch.zeros((35,1,50,128,128)).to(device)
+            for j in range(num_step):#for data_test in test_loader:
 
-            # update running training loss
-            test_loss += loss_test.item()*videos.size(0)
-            i += 1
-            
+    #             print(i)
+                # _ stands in for labels, here
+                # no need to flatten images
+#                 videos_test = data_test.to(device)
+                videos_test[:,0,:,:,:] = torch.Tensor(fp_test[:,j,:,:,:]).to(device)
+                # forward pass: compute predicted outputs by passing inputs to the model
+                outputs_test,_ = model(videos_test)
+                # calculate the loss
+                recon_loss_test, kl_loss_test, l2_loss_test = criterion(outputs_test, videos_test,lfads)
+                loss_test = recon_loss_test + kl_loss_test + l2_loss_test
+
+                # update running training loss
+                test_loss += loss_test.item()*videos.size(0)
+                i += 1
+#             toc_val = time.time()
+#         print(toc_val - tic_val)
         writer_val.add_scalar('total/loss', test_loss, epoch)
             
 #             scheduler.step(loss)
             
-        # print avg training statistics  
-        train_loss = train_loss/len(train_loader)
-        test_loss = test_loss/len(test_loader)
-        print(len(train_loader))
+#         print avg training statistics  
+        train_loss = train_loss/len(fp_train)
+        test_loss = test_loss/len(fp_test)
+        print(len(fp_train))
         bw_toc = time.time()
         print('Epoch: {} \tTotal Loss: {:.6f} \tl2 Loss: {:.6f} \tkl Loss: {:.6f} \tTest Loss {:.6f} \tTime {:.3f} s'.format(
             epoch, train_loss, l2_loss, kl_loss, test_loss, (bw_toc - bw_tic)))
-        
+#     print(bw_toc - bw_tic)    
     #save the trained model
     torch.save(model, os.path.join(args.save_loc, 'entire_model.pth'))
 
 if __name__=="__main__":
-    train_data, train_loader, test_loader = get_data()
-    train_convVAE(train_loader,test_loader,args.num_epochs) #
+#     train_data, train_loader, test_loader = get_data()
+    fp_train, fp_test = get_data()
+    train_convVAE(fp_train,fp_test,args.num_epochs) #
 
