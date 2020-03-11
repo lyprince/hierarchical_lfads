@@ -19,28 +19,30 @@ class Conv3d_LFADS_Net(nn.Module):
         super(Conv3d_LFADS_Net, self).__init__()
         
         self.device= device
-        
+        self.factor_size = factor_size
         self.channel_dims = (1,) + channel_dims
         self.conv_layers = nn.ModuleList()
         
         for n in range(1, len(self.channel_dims)):
             self.conv_layers.add_module('{}{}'.format('conv', n),
-                                        conv_block(in_f = self.channel_dims[n-1],
+                                        Conv3d_Block(in_f = self.channel_dims[n-1],
                                                    out_f= self.channel_dims[n]))
         
         self.deconv_layers = nn.ModuleList()
         for n in reversed(range(0, len(self.channel_dims))):
             self.deconv_layers.add_module('{}{}'.format('deconv', n),
-                                          deconv_block(in_f = self.channel_dims[n],
+                                          ConvTranspose3d_Block(in_f = self.channel_dims[n],
                                                        out_f= self.channel_dims[n-1]))
             
             
         # Placeholder
-        self.conv_output_size = self.channel_dims[-1] ** 3
+        self.kernel_output_size = 8
+        self.conv_output_size = self.kernel_output_size * self.kernel_output_size * self.channel_dims[-1]
         self.conv_dense_size = conv_dense_size
         self.conv_dropout = nn.Dropout(conv_dropout)
-        self.conv_dense = nn.Linear(in_features= self.conv_output_size,
+        self.conv_dense_1 = nn.Linear(in_features= self.conv_output_size,
                                     out_features= self.conv_dense_size)
+        self.conv_dense_2 = nn.Linear(in_features= self.factor_size,self.final_size*self.conv_output_size)
         
         self.lfads = LFADS_Net(input_size= self.conv_dense_size,
                                g_encoder_size=g_encoder_size,
@@ -85,13 +87,14 @@ class Conv3d_LFADS_Net(nn.Module):
         
         x = x.permute(0, 2, 1, 3, 4)
         x = x.reshape(x.shape[0],x.shape[1],-1)
+        x = self.conv_dense_1(x.view(batch_size,seq_len,w_out*h_out*num_out_ch))
         
         x = x.permute(1, 0, 2)
         factors, gen_inputs = self.lfads(x)
         x = factors
         x = x.permute(1, 0, 2)
-        x = 
-
+        x = self.conv_dense_2(x)
+        
         # call LFADS here:
         # x should be reshaped for LFADS [time x batch x cells]:
         # 
