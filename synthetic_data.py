@@ -5,6 +5,8 @@ import importlib
 import skimage.draw as draw
 import torch
 import torchvision
+import tempfile
+
 if importlib.find_loader('oasis'):
     import oasis
 
@@ -282,23 +284,43 @@ def generate_cells(num_cells, frame_width, frame_height, cell_radius):
         
 
 class SyntheticCalciumVideoDataset(torch.utils.data.Dataset):
-   
-    def __init__(self, traces, cells):
+
+    
+    def __init__(self, traces, cells, device='cpu', num_workers= 1, tmpdir='/tmp/'):
+        
         super(SyntheticCalciumVideoDataset, self).__init__()
-        
-        if not torch.is_tensor(cells):
-            cells = torch.Tensor(cells)
-        
-        if not torch.is_tensor(traces):
-            traces = torch.Tensor(traces)
             
-        self.cells = cells
+        self.cells  = cells
         self.traces = traces
         
+        self.device = device
+        
+        num_trials, num_steps, num_cells = self.traces.shape
+        num_cells, height, width = self.cells.shape
+        num_channels = 1
+        
+        self.tempfile = tempfile.TemporaryFile(suffix='.dat', dir='/tmp/')
+        self.data = np.memmap(self.tempfile, dtype='float32', mode='w+', shape=(num_trials, 1, num_steps, height, width))
+        
+        def generate_video(trace, mmap, ix):
+            res_ = (trace[..., np.newaxis, np.newaxis] * self.cells).sum(axis=1)[np.newaxis, ...]
+            mmap[ix] = res_
+        
+        from joblib import Parallel, delayed
+        Parallel(n_jobs=num_workers)(delayed(generate_video)(trace, self.data, ix) for ix, trace in enumerate(self.traces))
+            
+        print(self.data.shape)
+        
+        self.dtype = self[0][0].dtype
+        
     def __getitem__(self, ix):
-        return (self.traces[ix].unsqueeze(-1).unsqueeze(-1) * self.cells).sum(dim=1).unsqueeze(0)
+        return (torch.from_numpy(self.data[ix]).to(self.device), )
     
     def __len__(self):
         # return traces.__len__()
         return len(self.traces)
     
+    def close(self):
+        self.tempfile.close()
+        del self.data
+        
