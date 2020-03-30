@@ -300,21 +300,19 @@ class SyntheticCalciumVideoDataset(torch.utils.data.Dataset):
         num_channels = 1
         
         self.tempfile = tempfile.TemporaryFile(suffix='.dat', dir='/tmp/')
-        self.data = np.memmap(self.tempfile, dtype='float32', mode='w+', shape=(num_trials, 1, num_steps, height, width))
+        self.tensors = (np.memmap(self.tempfile, dtype='float32', mode='w+', shape=(num_trials, 1, num_steps, height, width)),)
         
         def generate_video(trace, mmap, ix):
             res_ = (trace[..., np.newaxis, np.newaxis] * self.cells).sum(axis=1)[np.newaxis, ...]
-            mmap[ix] = res_
+            mmap[0][ix] = res_
         
         from joblib import Parallel, delayed
-        Parallel(n_jobs=num_workers)(delayed(generate_video)(trace, self.data, ix) for ix, trace in enumerate(self.traces))
-            
-        print(self.data.shape)
+        Parallel(n_jobs=num_workers)(delayed(generate_video)(trace, self.tensors, ix) for ix, trace in enumerate(self.traces))
         
         self.dtype = self[0][0].dtype
         
     def __getitem__(self, ix):
-        return (torch.from_numpy(self.data[ix]).to(self.device), )
+        return (torch.from_numpy(self.tensors[0][ix]).to(self.device), )
     
     def __len__(self):
         # return traces.__len__()
@@ -322,5 +320,5 @@ class SyntheticCalciumVideoDataset(torch.utils.data.Dataset):
     
     def close(self):
         self.tempfile.close()
-        del self.data
+        del self.tensors
         

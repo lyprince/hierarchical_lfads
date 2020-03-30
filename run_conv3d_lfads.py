@@ -63,8 +63,6 @@ def main():
     train_dl    = torch.utils.data.DataLoader(SyntheticCalciumVideoDataset(traces= data_dict['train_fluor'], cells=data_dict['cells'], device=device), batch_size=args.batch_size)
     valid_dl    = torch.utils.data.DataLoader(SyntheticCalciumVideoDataset(traces= data_dict['valid_fluor'], cells=data_dict['cells'], device=device), batch_size=args.batch_size)
     
-
-    
     num_trials, num_steps, num_cells = data_dict['train_fluor'].shape
     num_cells, width, height = data_dict['cells'].shape
     
@@ -122,18 +120,12 @@ def main():
     TIME = torch._np.arange(0, num_steps*data_dict['dt'], data_dict['dt'])
     
     train_truth = {}
-    if 'train_rates' in data_dict.keys():
-        train_truth['rates'] = data_dict['train_rates']
     if 'train_latent' in data_dict.keys():
         train_truth['latent'] = data_dict['train_latent']
         
     valid_truth = {}
-    if 'valid_rates' in data_dict.keys():
-        valid_truth['rates'] = data_dict['valid_rates']
     if 'valid_latent' in data_dict.keys():
         valid_truth['latent'] = data_dict['valid_latent']
-        
-    train_truth = {'rates' : data_dict['train_truth']}
 
     plotter = {'train' : Plotter(time=TIME, truth=train_truth),
                'valid' : Plotter(time=TIME, truth=valid_truth)}
@@ -177,5 +169,18 @@ def main():
                          type= 'objective',
                          value= run_manager.best)])
 
+    fig_folder = save_loc + 'figs/'
+    
+    if os.path.exists(fig_folder):
+        os.system('rm -rf %s'%fig_folder)
+    os.mkdir(fig_folder)
+    
+    import matplotlib
+    matplotlib.use('Agg')
+    fig_dict = plotter['valid'].plot_summary(model = run_manager.model, dl=run_manager.valid_dl, mode='video', num_average=4)
+    for k, v in fig_dict.items():
+        if type(k) == matplotlib.figure.Figure:
+            v.savefig(fig_folder+k+'.svg')
+    
 if __name__ == '__main__':
     main()

@@ -44,7 +44,6 @@ class Conv3d_LFADS_Net(nn.Module):
                                                            in_f = self.channel_dims[n-1],
                                                            out_f= self.channel_dims[n]))
             layer_dims = getattr(self.conv_layers, '{}{}'.format('block', n)).get_output_dims()
-            print((self.channel_dims[n],)+layer_dims)
         
         self.deconv_layers = nn.ModuleList()
         for n in reversed(range(0, len(self.channel_dims))):
@@ -80,7 +79,6 @@ class Conv3d_LFADS_Net(nn.Module):
         
     def forward(self, x):
         frame_per_block = 10
-        print(x.shape)
         batch_size, num_ch, seq_len, w, h = x.shape
         num_blocks = int(seq_len/frame_per_block)
         
@@ -93,7 +91,6 @@ class Conv3d_LFADS_Net(nn.Module):
         for n, layer in enumerate(self.conv_layers):
             x, ind1 = layer(x)
             Ind.append(ind1)
-            print(x.shape)
         
         num_out_ch = x.shape[1]
         w_out = x.shape[3]
@@ -105,8 +102,6 @@ class Conv3d_LFADS_Net(nn.Module):
 
         x = x.permute(0, 2, 1, 3, 4)
         x = x.reshape(x.shape[0],x.shape[1],-1)
-        print(x.shape)
-        print(self.conv_dense_1.in_features, self.conv_dense_1.out_features)
 #         pdb.set_trace()
         x = self.conv_dense_1(x.view(batch_size, seq_len, w_out * h_out * num_out_ch))
         
@@ -136,7 +131,7 @@ class Conv3d_LFADS_Net(nn.Module):
         x = x.view(batch_size, 1, seq_len, w, h)
         
         recon = {'data' : x}
-        return recon, factors
+        return recon, (factors, gen_inputs)
     
     def normalize_factors(self):
         self.lfads.normalize_factors()
