@@ -3,6 +3,7 @@ import os
 import json
 import numpy as np
 import yaml
+import torch
 
 def write_data(data_fname, data_dict, use_json=False, compression=None):
     """Write data in HD5F format.
@@ -80,7 +81,12 @@ def batchify_random_sample(data, batch_size, ix=None):
     num_trials = data.shape[0]
     if type(ix) is not int:
         ix = np.random.randint(num_trials)
-    batch = data[ix].unsqueeze(0).repeat(batch_size, 1, 1)
+    if torch.is_tensor(data[ix]):
+        sample = data[ix]
+    else:
+        sample = torch.from_numpy(data[ix])
+#         print(sample.shape)
+    batch = sample.unsqueeze(0).repeat(batch_size, *(1,)*(sample.ndimension()))
     return batch, ix
 
 def update_param_dict(prev_params, new_params):

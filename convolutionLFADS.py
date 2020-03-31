@@ -232,7 +232,7 @@ def get_data():
     train_loader = torch.utils.data.DataLoader(train_data, batch_size=batch_size, num_workers=num_workers)
     test_loader = torch.utils.data.DataLoader(test_data, batch_size=batch_size, num_workers=num_workers)
     
-    fp_train = np.memmap(filename_train, dtype='float32', mode='w+', shape=(batch_size,8,int(N_steps/N_stepsinbin),128,128))
+    fp_train = np.memmap(filename_train, dtype='float32', mode='w+', shape=(batch_size, 8, int(N_steps/N_stepsinbin), 128, 128))
     i = 0
     tic = time.time()
     for data in train_loader:

@@ -212,7 +212,7 @@ class LFADS_Net(nn.Module):
             - logvar (torch.Tensor) : log-variance of diagonal gaussian
         '''
         # Generate noise from standard gaussian
-        eps = torch.randn(mean.shape, requires_grad=False).to(self.device)
+        eps = torch.randn(mean.shape, requires_grad=False, dtype=torch.float32).to(torch.get_default_dtype()).to(self.device)
         # Scale and shift by mean and standard deviation
         return torch.exp(logvar*0.5)*eps + mean
     
@@ -271,6 +271,9 @@ class LFADS_Net(nn.Module):
                 
     def normalize_factors(self):
         self.generator.fc_factors.weight.data = F.normalize(self.generator.fc_factors.weight.data, dim=1)
+        
+    def change_parameter_grad_status(self, step, optimizer, scheduler, loading_checkpoint=False):
+        return optimizer, scheduler
     
 class LFADS_SingleSession_Net(LFADS_Net):
     

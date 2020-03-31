@@ -46,7 +46,7 @@ class Base_Loss(nn.Module):
             else:
                 pass
         return False
-            
+
 class SVLAE_Loss(Base_Loss):
     def __init__(self, loglikelihood_obs, loglikelihood_deep,
                  loss_weight_dict = {'kl_obs' : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 0,    'max' : 1.0, 'min' : 0.0},
@@ -137,7 +137,48 @@ class LFADS_Loss(Base_Loss):
                      'total' : float(loss.data)}
 
         return loss, loss_dict
+    
+class Conv_LFADS_Loss(LFADS_Loss):
+    
+    def __init__(self, loglikelihood,
+                 loss_weight_dict= {'kl' : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 0, 'max' : 1.0, 'min' : 0.0},
+                                    'l2' : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 0, 'max' : 1.0, 'min' : 0.0}},
+                 l2_con_scale=0.0, l2_gen_scale=0.0):
+        
+        super(Conv_LFADS_Loss, self).__init__(loglikelihood=loglikelihood,
+                                              loss_weight_dict=loss_weight_dict,
+                                              l2_con_scale=l2_con_scale,
+                                              l2_gen_scale=l2_gen_scale)
+        
+        
+    def forward(self, x_orig, x_recon, model):
+        kl_weight = self.loss_weights['kl']['weight']
+        l2_weight = self.loss_weights['l2']['weight']
+        recon_loss = -self.loglikelihood(x_orig, x_recon['data'])
+
+        kl_loss = kl_weight * kldiv_gaussian_gaussian(post_mu  = model.lfads.g_posterior_mean.to(torch.float32),
+                                                      post_lv  = model.lfads.g_posterior_logvar.to(torch.float32),
+                                                      prior_mu = model.lfads.g_prior_mean.to(torch.float32),
+                                                      prior_lv = model.lfads.g_prior_logvar.to(torch.float32)).to(dtype=x_orig.dtype)
+    
+        l2_loss = 0.5 * l2_weight * self.l2_gen_scale * model.lfads.generator.gru_generator.hidden_weight_l2_norm()
+    
+        if hasattr(model, 'controller'):
+            kl_loss += kl_weight * kldiv_gaussian_gaussian(post_mu  = model.lfads.u_posterior_mean.to(torch.float32),
+                                                           post_lv  = model.lfads.u_posterior_logvar.to(torch.float32),
+                                                           prior_mu = model.lfads.u_prior_mean.to(torch.float32),
+                                                           prior_lv = model.lfads.u_prior_logvar.to(torch.float32)).to(dtype=x_orig.dtype7)
             
+            l2_loss += 0.5 * l2_weight * self.l2_con_scale * model.lfads.controller.gru_controller.hidden_weight_l2_norm()
+            
+        loss = recon_loss +  kl_loss + l2_loss
+        loss_dict = {'recon' : float(recon_loss.data),
+                     'kl'    : float(kl_loss.data),
+                     'l2'    : float(l2_loss.data),
+                     'total' : float(loss.data)}
+
+        return loss, loss_dict
+        
 class LogLikelihoodPoisson(nn.Module):
     
     def __init__(self, dt=1.0, device='cpu'):
@@ -188,8 +229,11 @@ class LogLikelihoodGaussian(nn.Module):
     def __init__(self):
         super(LogLikelihoodGaussian, self).__init__()
         
-    def forward(self, x, mean, logvar):
-        return loglikelihood_gaussian(x, mean, logvar)
+    def forward(self, x, mean, logvar=None):
+        if logvar:
+            return loglikelihood_gaussian(x, mean, logvar)
+        else:
+            return torch.nn.functional.mse_loss(x, mean, reduction='sum')/x.shape[0]
     
 def loglikelihood_gaussian(x, mean, logvar):
     from math import pi

@@ -18,9 +18,9 @@ class Plotter(object):
                        'linc_blue' : '#37A1D0'}
         
         self.truth = truth
-    #------------------------------------------------------------------------------
     
-    def plot_summary(self, model, dl, num_average=200, ix=None):
+    #------------------------------------------------------------------------------
+    def plot_summary(self, model, dl, num_average=200, ix=None, mode='traces'):
         
         '''
         plot_summary(data, truth=None, num_average=100, ix=None)
@@ -45,18 +45,25 @@ class Plotter(object):
         data = dl.dataset.tensors[0]
         
         batch_example, ix = batchify_random_sample(data=data, batch_size=num_average, ix=ix)
-        figs_dict['ix'] = ix        
+        batch_example = batch_example.to(model.device)
+        figs_dict['ix'] = ix
         
         model.eval()
         with torch.no_grad():
             recon, (factors, inputs) = model(batch_example)
         
-        orig = data[ix].cpu().numpy()
+        orig = batch_example[0].cpu().numpy()
 #         print(batch_example.shape, data.shape, recon['data'].shape)
         
 #         pdb.set_trace()
-        figs_dict['traces'] = self.plot_traces(recon['data'].mean(dim=0).detach().cpu().numpy(), orig, mode='activity', norm=False)
-        figs_dict['traces'].suptitle('Actual fluorescence trace vs.\nestimated mean for a sampled trial')
+        
+        if mode=='traces':
+            figs_dict['traces'] = self.plot_traces(recon['data'].mean(dim=0).detach().cpu().numpy(), orig, mode='activity', norm=False)
+            figs_dict['traces'].suptitle('Actual fluorescence trace vs.\nestimated mean for a sampled trial')
+        
+        elif mode=='video':
+            # TODO
+            pass
         
         if self.truth:
             if 'rates' in self.truth.keys():
@@ -133,6 +140,11 @@ class Plotter(object):
         plt.legend(['Actual', 'Reconstructed'])
         
         return fig
+    
+    #------------------------------------------------------------------------------
+    def plot_video(self, model, dl, num_average):
+        # TODO
+        pass
     
     #------------------------------------------------------------------------------
     
