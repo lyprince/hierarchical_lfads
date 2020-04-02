@@ -165,7 +165,6 @@ def generate_lorenz_data(N_trials, N_inits, N_cells, N_steps, N_stepsinbin = 1,
     print('Saving to %s/synth_data/lorenz_%03d'%(save_dir, seed), flush=True)
     if save:
         utils.write_data('%s/synth_data/lorenz_%03d'%(save_dir, seed), data_dict)
-
     return data_dict
 
 

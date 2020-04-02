@@ -8,7 +8,9 @@ import torchvision
 import torch.optim as opt
 import torchvision.transforms as trf
 
-from orion.client import report_results
+# import importlib
+# if importlib.find_loader('orion'):
+#     from orion.client import report_results
 
 from synthetic_data import SyntheticCalciumVideoDataset
 
@@ -62,10 +64,10 @@ def main():
     data_dict   = read_data(args.data_path)
     train_dl    = torch.utils.data.DataLoader(SyntheticCalciumVideoDataset(traces= data_dict['train_fluor'], cells=data_dict['cells'], device=device), batch_size=args.batch_size)
     valid_dl    = torch.utils.data.DataLoader(SyntheticCalciumVideoDataset(traces= data_dict['valid_fluor'], cells=data_dict['cells'], device=device), batch_size=args.batch_size)
-    
+
     num_trials, num_steps, num_cells = data_dict['train_fluor'].shape
     num_cells, width, height = data_dict['cells'].shape
-    
+
     model = Conv3d_LFADS_Net(input_dims      = (num_steps, width, height),
                              channel_dims    = hyperparams['model']['channel_dims'],
                              factor_size     = hyperparams['model']['factor_size'],
@@ -94,7 +96,6 @@ def main():
                                                   'l2': hyperparams['objective']['l2']},
                                                    l2_con_scale= hyperparams['objective']['l2_con_scale'],
                                                    l2_gen_scale= hyperparams['objective']['l2_gen_scale']).to(device)
-    
     total_params = 0
     for ix, (name, param) in enumerate(model.named_parameters()):
         print(ix, name, list(param.shape), param.numel(), param.requires_grad)
@@ -165,9 +166,10 @@ def main():
 
     run_manager.run()
     
-    report_results([dict(name= 'valid_loss',
-                         type= 'objective',
-                         value= run_manager.best)])
+#     if importlib.find_loader('orion'):
+#          report_results([dict(name= 'valid_loss',
+#                              type= 'objective',
+#                              value= run_manager.best)])
 
     fig_folder = save_loc + 'figs/'
     
