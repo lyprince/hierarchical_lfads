@@ -154,7 +154,7 @@ class Conv_LFADS_Loss(LFADS_Loss):
     def forward(self, x_orig, x_recon, model):
         kl_weight = self.loss_weights['kl']['weight']
         l2_weight = self.loss_weights['l2']['weight']
-        recon_loss = -self.loglikelihood(x_orig, x_recon['data'])
+        recon_loss = self.loglikelihood(x_orig, x_recon['data'])
 
         kl_loss = kl_weight * kldiv_gaussian_gaussian(post_mu  = model.lfads.g_posterior_mean.to(torch.float32),
                                                       post_lv  = model.lfads.g_posterior_logvar.to(torch.float32),

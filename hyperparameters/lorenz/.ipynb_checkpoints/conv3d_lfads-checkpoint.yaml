@@ -49,7 +49,7 @@ model:
         learnable: false
 
   clip_val: 5.0
-  conv_dropout: 0.5
+  conv_dropout: 0.05
   lfads_dropout: 0.05
   max_norm: 200
   normalize_factors: true

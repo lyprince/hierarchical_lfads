@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from lfads import LFADS_Net
-
+import time
 import pdb
 
 class Conv3d_LFADS_Net(nn.Module):
@@ -88,10 +88,12 @@ class Conv3d_LFADS_Net(nn.Module):
         
 
         Ind = list()
+        conv_tic = time.time()
         for n, layer in enumerate(self.conv_layers):
             x, ind1 = layer(x)
             Ind.append(ind1)
-        
+        conv_toc = time.time()
+
         num_out_ch = x.shape[1]
         w_out = x.shape[3]
         h_out = x.shape[4]
@@ -106,7 +108,10 @@ class Conv3d_LFADS_Net(nn.Module):
         x = self.conv_dense_1(x.view(batch_size, seq_len, w_out * h_out * num_out_ch))
         
         x = x.permute(1, 0, 2)
+        lfads_tic = time.time()
         factors, gen_inputs = self.lfads(x)
+        lfads_toc = time.time()
+        # print('conv t: ',conv_toc - conv_tic,' lfads t: ',lfads_toc - lfads_tic)
         x = factors
         x = x.permute(1, 0, 2)
         x = self.conv_dense_2(x)
