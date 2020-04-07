@@ -27,7 +27,7 @@ parser.add_argument('-p', '--hyperparameter_path', type=str)
 parser.add_argument('-o', '--output_dir', default='/tmp', type=str)
 parser.add_argument('--max_epochs', default=2000, type=int)
 parser.add_argument('--batch_size', default=None, type=int)
-parser.add_argument('-t', '--use_tensorboard', action='store_true', default=False)
+parser.add_argument('-t', '--use_tensorboard', action='store_true', default=True)
 parser.add_argument('-r', '--restart', action='store_true', default=False)
 parser.add_argument('-c', '--do_health_check', action='store_true', default=False)
 
@@ -133,7 +133,8 @@ def main():
     
     if args.use_tensorboard:
         import importlib
-        if importlib.util.find_spec('torch.utils.tensorboard'):
+        #if importlib.util.find_spec('torch.utils.tensorboard'):
+        if importlib.util.find_spec('tensorboardX'):
             tb_folder = save_loc + 'tensorboard/'
             if not os.path.exists(tb_folder):
                 os.mkdir(tb_folder)
@@ -141,7 +142,8 @@ def main():
                 os.system('rm -rf %s'%tb_folder)
                 os.mkdir(tb_folder)
 
-            from torch.utils.tensorboard import SummaryWriter
+            #from torch.utils.tensorboard import SummaryWriter
+            from tensorboardX import SummaryWriter
             writer = SummaryWriter(tb_folder)
             rm_plotter = plotter
         else:
@@ -181,7 +183,7 @@ def main():
     matplotlib.use('Agg')
     fig_dict = plotter['valid'].plot_summary(model = run_manager.model, dl=run_manager.valid_dl, mode='video', num_average=4)
     for k, v in fig_dict.items():
-        if type(k) == matplotlib.figure.Figure:
+        if type(v) == matplotlib.figure.Figure:
             v.savefig(fig_folder+k+'.svg')
     
 if __name__ == '__main__':
