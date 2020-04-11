@@ -4,6 +4,7 @@ import argparse
 import os
 
 import torch
+import torch.nn as nn
 import torchvision
 import torch.optim as opt
 import torchvision.transforms as trf
@@ -21,22 +22,30 @@ from conv_lfads import Conv3d_LFADS_Net
 from utils import read_data, load_parameters
 from plotter import Plotter
 
+torch.backends.cudnn.benchmark = True
+torch.backends.cudnn.enabled = True
+
 parser = argparse.ArgumentParser()
 parser.add_argument('-d', '--data_path', type=str)
 parser.add_argument('-p', '--hyperparameter_path', type=str)
 parser.add_argument('-o', '--output_dir', default='/tmp', type=str)
 parser.add_argument('--max_epochs', default=2000, type=int)
 parser.add_argument('--batch_size', default=None, type=int)
-parser.add_argument('-t', '--use_tensorboard', action='store_true', default=True)
+parser.add_argument('-t', '--use_tensorboard', action='store_true', default=False)
 parser.add_argument('-r', '--restart', action='store_true', default=False)
 parser.add_argument('-c', '--do_health_check', action='store_true', default=False)
-
+parser.add_argument('--gpu', default='0,1', type=str)
 parser.add_argument('--lr', type=float, default=None)
 
 def main():
     args = parser.parse_args()
     
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    os.environ["CUDA_VISIBLE_DEVICES"]=str(args.gpu)
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+    else:
+        device = 'cpu'
+#     device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
     hyperparams = load_parameters(args.hyperparameter_path)
     
@@ -83,8 +92,9 @@ def main():
                              lfads_dropout   = hyperparams['model']['lfads_dropout'],
                              do_normalize_factors = hyperparams['model']['normalize_factors'],
                              max_norm        = hyperparams['model']['max_norm'],
-                             device          = device).to(device)
+                             device          = device)
     
+    model = _CustomDataParallel(model).to(device) #
     model.to(dtype=train_dl.dataset.dtype)
     torch.set_default_dtype(train_dl.dataset.dtype)
     
@@ -117,7 +127,7 @@ def main():
                                 threshold_mode = 'abs',
                                 cooldown       = hyperparams['scheduler']['scheduler_cooldown'],
                                 min_lr         = hyperparams['scheduler']['lr_min'])
-    
+
     TIME = torch._np.arange(0, num_steps*data_dict['dt'], data_dict['dt'])
     
     train_truth = {}
@@ -179,12 +189,44 @@ def main():
         os.system('rm -rf %s'%fig_folder)
     os.mkdir(fig_folder)
     
+    
+    model_to_plot = Conv3d_LFADS_Net(input_dims      = (num_steps, width, height),
+                    channel_dims    = hyperparams['model']['channel_dims'],
+                    factor_size     = hyperparams['model']['factor_size'],
+                    g_encoder_size  = hyperparams['model']['g_encoder_size'],
+                    c_encoder_size  = hyperparams['model']['c_encoder_size'],
+                    g_latent_size   = hyperparams['model']['g_latent_size'],
+                    u_latent_size   = hyperparams['model']['u_latent_size'],
+                    controller_size = hyperparams['model']['controller_size'],
+                    generator_size  = hyperparams['model']['generator_size'],
+                    prior           = hyperparams['model']['prior'],
+                    clip_val        = hyperparams['model']['clip_val'],
+                    conv_dropout    = hyperparams['model']['conv_dropout'],
+                    lfads_dropout   = hyperparams['model']['lfads_dropout'],
+                    do_normalize_factors = hyperparams['model']['normalize_factors'],
+                    max_norm        = hyperparams['model']['max_norm'],
+                    device          = 'cuda:0')
+    state_dict = torch.load(save_loc + 'checkpoints/best.pth')
+    model_to_plot.load_state_dict(state_dict['net'])
+    model_to_plot = model_to_plot.to('cuda:0')
     import matplotlib
     matplotlib.use('Agg')
-    fig_dict = plotter['valid'].plot_summary(model = run_manager.model, dl=run_manager.valid_dl, mode='video', num_average=4)
+    
+    fig_dict = plotter['valid'].plot_summary(model = model_to_plot, dl=run_manager.valid_dl, mode='video', num_average=4) #
     for k, v in fig_dict.items():
         if type(v) == matplotlib.figure.Figure:
             v.savefig(fig_folder+k+'.svg')
-    
+
+
+class _CustomDataParallel(nn.DataParallel):
+    def __init__(self, model):
+        super(_CustomDataParallel, self).__init__(model)
+
+    def __getattr__(self, name):
+        try:
+            return super(_CustomDataParallel, self).__getattr__(name)
+        except AttributeError:
+            return getattr(self.module, name)
+        
 if __name__ == '__main__':
     main()

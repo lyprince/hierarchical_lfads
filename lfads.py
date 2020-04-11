@@ -108,8 +108,13 @@ class LFADS_Net(nn.Module):
             self.controller_init = nn.Parameter(torch.zeros(self.controller_size))
         
         # Initialize priors
+#         self.register_buffer('g_prior_mean',None)
+#         self.register_buffer('g_prior_logvar',None)
+#         self.register_buffer('g_posterior_mean',None)
+#         self.register_buffer('g_posterior_logvar',None)
         
         self.g_prior_mean = torch.ones(self.g_latent_size, device=device) * prior['g0']['mean']['value']
+        
         if prior['g0']['mean']['learnable']:
             self.g_prior_mean = nn.Parameter(self.g_prior_mean)
         self.g_prior_logvar = torch.ones(self.g_latent_size, device=device) * log(prior['g0']['var']['value'])
@@ -139,7 +144,7 @@ class LFADS_Net(nn.Module):
         '''
         import time
         tic = time.time()
-        
+
         # Initialize hidden states
         g_encoder_state, c_encoder_state, controller_state = self.initialize_hidden_states(input) 
 
@@ -390,6 +395,9 @@ class LFADS_Encoder(nn.Module):
             self.gru_c_encoder  = nn.GRU(input_size=self.input_size, hidden_size=self.c_encoder_size, bidirectional=True)
             
     def forward(self, input, hidden):
+        self.gru_g_encoder.flatten_parameters()
+        if self.c_encoder_size > 0:
+            self.gru_c_encoder.flatten_parameters()
         gru_g_encoder_init, gru_c_encoder_init = hidden
         
         # Run bidirectional RNN over data

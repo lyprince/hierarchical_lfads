@@ -152,6 +152,7 @@ def generate_lorenz_data(N_trials, N_inits, N_cells, N_steps, N_stepsinbin = 1,
     data_dict['train_truth'] = data_dict['train_rates']
     data_dict['valid_truth'] = data_dict['valid_rates']
     data_dict['dt']          = dt_cal
+    data_dict['N_stepsinbin'] = N_stepsinbin
 
     data_dict['loading_weights'] = W
 

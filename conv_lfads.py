@@ -61,6 +61,10 @@ class Conv3d_LFADS_Net(nn.Module):
         self.conv_dense_2 = nn.Linear(in_features= self.factor_size,
                                       out_features = self.conv_output_size)
         
+        
+#         self.lfads_param = dict()
+        print(self.device)
+        print(torch.cuda.device_count())
         self.lfads = LFADS_Net(input_size= self.conv_dense_size,
                                g_encoder_size=self.g_encoder_size,
                                c_encoder_size=self.c_encoder_size,
@@ -77,7 +81,20 @@ class Conv3d_LFADS_Net(nn.Module):
                                factor_bias=self.factor_bias,
                                device= self.device)
         
+        self.register_buffer('g_posterior_mean',None)
+        self.register_buffer('g_posterior_logvar',None)
+        self.register_buffer('g_prior_mean',self.lfads.g_prior_mean)
+        self.register_buffer('g_prior_logvar',self.lfads.g_prior_logvar)
+        
+#         self.lfads_param['g_posterior_mean'] = self.lfads.g_posterior_mean
+#         self.lfads_param['g_posterior_logvar'] = self.lfads.g_posterior_logvar
+#         self.lfads_param['g_prior_mean'] = self.lfads.g_prior_mean
+#         self.lfads_param['g_prior_logvar'] = self.lfads.g_prior_logvar
+        
+        
+        
     def forward(self, x):
+        
         frame_per_block = 10
         batch_size, num_ch, seq_len, w, h = x.shape
         num_blocks = int(seq_len/frame_per_block)
@@ -135,8 +152,13 @@ class Conv3d_LFADS_Net(nn.Module):
         x = x.permute(0, 2, 1, 3, 4, 5)
         x = x.view(batch_size, 1, seq_len, w, h)
         
+        g_posterior = dict()
+        g_posterior['mean'] = self.lfads.g_posterior_mean
+        g_posterior['logvar'] = self.lfads.g_posterior_logvar
+        
         recon = {'data' : x}
-        return recon, (factors, gen_inputs)
+        print(factors.shape)
+        return recon, (factors, gen_inputs), g_posterior
     
     def normalize_factors(self):
         self.lfads.normalize_factors()

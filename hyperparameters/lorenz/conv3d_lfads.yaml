@@ -1,5 +1,5 @@
 optimizer:
-  lr_init: 0.01
+  lr_init: 0.001
   betas: !!python/tuple
   - 0.9
   - 0.99
@@ -49,7 +49,7 @@ model:
         learnable: false
 
   clip_val: 5.0
-  conv_dropout: 0.05
+  conv_dropout: 0
   lfads_dropout: 0.05
   max_norm: 200
   normalize_factors: true
