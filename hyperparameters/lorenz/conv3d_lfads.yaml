@@ -31,6 +31,7 @@ model:
   channel_dims: !!python/tuple
   - 16
   - 32
+  conv_dense_size: 128
   factor_size: 3
   g_encoder_size: 64
   c_encoder_size: 0
@@ -54,4 +55,4 @@ model:
   max_norm: 200
   normalize_factors: true
 
-model_name: lfads
+model_name: convlfads

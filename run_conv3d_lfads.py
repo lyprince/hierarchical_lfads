@@ -58,7 +58,7 @@ def main():
     
     data_name = args.data_path.split('/')[-1]
     model_name = hyperparams['model_name']
-    mhp_list = [key.replace('size', '').replace('deep', 'd').replace('obs', 'o').replace('_', '')[:4] + str(val) for key, val in hyperparams['model'].items() if 'size' in key]
+    mhp_list = [key.replace('size', '').replace('deep', 'd').replace('obs', 'o').replace('_', '')[:4] + str(val) for key, val in hyperparams['model'].items() if ('size' in key) or ('dims' in key)] #
     mhp_list.sort()
     hyperparams['run_name'] = '_'.join(mhp_list)
     orion_hp_string = orion_hp_string.replace('\n', '-').replace(' ', '').replace('=', '')
@@ -78,6 +78,7 @@ def main():
     num_cells, width, height = data_dict['cells'].shape
 
     model = Conv3d_LFADS_Net(input_dims      = (num_steps, width, height),
+                             conv_dense_size = hyperparams['model']['conv_dense_size'],
                              channel_dims    = hyperparams['model']['channel_dims'],
                              factor_size     = hyperparams['model']['factor_size'],
                              g_encoder_size  = hyperparams['model']['g_encoder_size'],
@@ -191,6 +192,7 @@ def main():
     
     
     model_to_plot = Conv3d_LFADS_Net(input_dims      = (num_steps, width, height),
+                    conv_dense_size = hyperparams['model']['conv_dense_size'],
                     channel_dims    = hyperparams['model']['channel_dims'],
                     factor_size     = hyperparams['model']['factor_size'],
                     g_encoder_size  = hyperparams['model']['g_encoder_size'],

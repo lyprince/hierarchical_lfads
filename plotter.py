@@ -50,7 +50,6 @@ class Plotter(object):
         model.eval()
         with torch.no_grad():
             recon, (factors, inputs), g_posterior = model(batch_example)
-            print(factors.shape)
         
         orig = batch_example[0].cpu().numpy()
 #         print(batch_example.shape, data.shape, recon['data'].shape)
@@ -58,7 +57,7 @@ class Plotter(object):
 #         pdb.set_trace()
         
         if mode=='traces':
-            figs_dict['traces'] = self.plot_traces(recon['data'].mean(dim=0).detach().cpu().numpy(), orig, mode='activity', norm=False)
+            figs_dict['traces'] = self.plot_traces(recon['data'].mean(dim=0).detach().cpu().numpy(), orig, mode='activity', norm=True)
             figs_dict['traces'].suptitle('Actual fluorescence trace vs.\nestimated mean for a sampled trial')
         
         elif mode=='video':
@@ -132,9 +131,18 @@ class Plotter(object):
             idxs  = list(range(num_cells))
         
         for ii, (ax,idx) in enumerate(zip(axs,idxs)):
-            plt.sca(ax)
-            plt.plot(self.time, true[:, idx], lw=2, color=self.colors['linc_red'])
-            plt.plot(self.time, pred[:, idx], lw=2, color=self.colors['linc_blue'])
+            if norm is True:
+                true_norm= (true[:, idx] - np.mean(true[:, idx]))/np.std(true[:, idx])
+                pred_norm= (pred[:, idx] - np.mean(pred[:, idx]))/np.std(pred[:, idx])
+                
+                plt.sca(ax)
+                plt.plot(self.time, true_norm, lw=2, color=self.colors['linc_red'])
+                plt.plot(self.time, pred_norm, lw=2, color=self.colors['linc_blue'])
+            
+            else:
+                plt.sca(ax)
+                plt.plot(self.time, true[:, idx], lw=2, color=self.colors['linc_red'])
+                plt.plot(self.time, pred[:, idx], lw=2, color=self.colors['linc_blue'])
                 
         fig.subplots_adjust(wspace=0.1, hspace=0.1)
         plt.legend(['Actual', 'Reconstructed'])
