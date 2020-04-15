@@ -157,7 +157,7 @@ class Conv3d_LFADS_Net(nn.Module):
         g_posterior['logvar'] = self.lfads.g_posterior_logvar
         
         recon = {'data' : x}
-        print(factors.shape)
+
         return recon, (factors, gen_inputs), g_posterior
     
     def normalize_factors(self):
