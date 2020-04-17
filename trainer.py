@@ -150,7 +150,7 @@ class RunManager():
                         if ('kl' in key):
                             full_val = val[-1] / self.objective.loss_weights[key]['weight']
                             self.best += full_val
-                    self.save_checkpoint('best')
+                    self.save_checkpoint('best_epoch_'+str(epoch))
                 
             self.save_checkpoint()
             if self.writer is not None:

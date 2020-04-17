@@ -1,5 +1,5 @@
 optimizer:
-  lr_init: 0.001
+  lr_init: 0.005
   betas: !!python/tuple
   - 0.9
   - 0.99
