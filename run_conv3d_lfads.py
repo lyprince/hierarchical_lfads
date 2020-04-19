@@ -208,7 +208,7 @@ def main():
                     do_normalize_factors = hyperparams['model']['normalize_factors'],
                     max_norm        = hyperparams['model']['max_norm'],
                     device          = 'cuda:0')
-    state_dict = torch.load(save_loc + 'checkpoints/best.pth')
+    state_dict = torch.load(save_loc + 'checkpoints/'+'best.pth')
     model_to_plot.load_state_dict(state_dict['net'])
     model_to_plot = model_to_plot.to('cuda:0')
     import matplotlib
