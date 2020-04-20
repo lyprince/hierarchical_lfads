@@ -249,13 +249,13 @@ class Conv3d_Block_1step(_ConvNd_Block):
                                            kernel_size= kernel_size, 
                                            padding= padding,
                                            dilation = dilation,
-                                           stride= stride))        
+                                           stride= stride))
+        self.add_module('relu1', nn.ReLU())
         self.add_module('pool1', nn.MaxPool3d(kernel_size= pool_size,
                                               stride= pool_size,
                                               padding=(0, 0, 0),
                                               dilation=(1, 1, 1),
                                               return_indices= True))
-        self.add_module('relu1', nn.ReLU())
     
 class _ConvTransposeNd_Block(nn.ModuleList):
     def __init__(self):
