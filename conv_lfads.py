@@ -46,7 +46,7 @@ class Conv3d_LFADS_Net(nn.Module):
             layer_dims = getattr(self.conv_layers, '{}{}'.format('block', n)).get_output_dims()
         
         self.deconv_layers = nn.ModuleList()
-        for n in reversed(range(0, len(self.channel_dims))):
+        for n in reversed(range(1, len(self.channel_dims))):
             self.deconv_layers.add_module('{}{}'.format('block', n),
                                           ConvTranspose3d_Block_1step(in_f = self.channel_dims[n],
                                                                       out_f= self.channel_dims[n-1]))
