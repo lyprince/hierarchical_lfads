@@ -1,0 +1,107 @@
+optimizer:
+  lr_init: 0.01
+  betas: !!python/tuple
+  - 0.9
+  - 0.99
+  eps: 0.1
+
+scheduler:
+  lr_min: 1.0e-05
+  scheduler_factor: 0.95
+  scheduler_patience: 6
+  scheduler_cooldown: 0
+
+objective:
+  kl_deep:
+    weight : 0.0
+    min: 0.0
+    max: 1.0
+    schedule_dur: 3200
+    schedule_start: 1600
+  kl_obs:
+    weight : 0.0
+    min: 0.0
+    max: 1.0
+    schedule_dur: 1600
+    schedule_start: 0
+  l2:
+    weight: 0.0
+    min: 0.0
+    max: 1.0
+    schedule_dur: 3200
+    schedule_start: 1600
+  recon_deep:
+    weight: 0.0
+    min: 1.0
+    max: 1.0
+    schedule_dur: 1
+    schedule_start: 0
+  l2_con_scale: 0
+  l2_gen_scale: 2000
+  
+model:
+  factor_size: 16
+  obs_encoder_size: 128
+  obs_latent_size: 128
+  obs_controller_size: 128
+  deep_g_encoder_size: 128
+  deep_c_encoder_size: 128
+  deep_g_latent_size: 64
+  deep_u_latent_size: 1
+  deep_controller_size: 64
+  generator_size: 200
+  
+  obs:
+    gain: 
+      value: 1.0
+      learnable: false
+    tau: 
+      value: 0.4
+      learnable: false
+    bias:
+      value: 0.0
+      learnable: false
+    var:
+      value: 0.1
+      learnable: false
+  
+  prior:
+    obs:
+      u: 
+        mean: 
+          value: 0.0
+          learnable: true
+        var: 
+          value: 0.1
+          learnable: true
+    deep:
+      g0: 
+        mean: 
+          value: 0.0
+          learnable: true
+        var: 
+          value: 0.1
+          learnable: false
+      u:
+        mean:
+          value: 0.0
+          learnable: false
+        var:
+          value: 0.1
+          learnable: true
+        tau:
+          value: 10
+          learnable: true
+
+  clip_val: 5.0
+  generator_burn: 10
+  dropout: 0.05
+  max_norm: 200
+  normalize_factors: true
+  factor_bias: false
+  deep_unfreeze_step: 1600
+  obs_early_stop_step: null
+  obs_continue_step: null
+  ar1_start_step: null
+
+model_name: svlae

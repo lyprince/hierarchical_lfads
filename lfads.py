@@ -125,7 +125,7 @@ class LFADS_Net(nn.Module):
                 self.u_prior_gp_logvar = nn.Parameter(self.u_prior_gp_logvar)
             self.u_prior_gp_logtau = torch.ones(self.u_latent_size, device=device) * log(prior['u']['tau']['value'])
             if prior['u']['tau']['learnable']:
-                self.u_gp_prior_gp_logtau = nn.Parameter(self.u_prior_gp_logtau)
+                self.u_prior_gp_logtau = nn.Parameter(self.u_prior_gp_logtau)
         
         # Initialize weights
         self.initialize_weights()

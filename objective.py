@@ -230,7 +230,7 @@ class LogLikelihoodGaussian(nn.Module):
         super(LogLikelihoodGaussian, self).__init__()
         
     def forward(self, x, mean, logvar=None):
-        if logvar:
+        if logvar is not None:
             return loglikelihood_gaussian(x, mean, logvar)
         else:
             return torch.nn.functional.mse_loss(x, mean, reduction='sum')/x.shape[0]

@@ -46,7 +46,7 @@ def main():
         orion_hp_string += 'lr= %.4f\n'%lr
     
     data_name = args.data_path.split('/')[-1]
-    model_name = hyperparams['model_name']
+    model_name = args.hyperparameter_path.split['/'][-1]
     mhp_list = [key.replace('size', '').replace('deep', 'd').replace('obs', 'o').replace('_', '')[:4] + str(val) for key, val in hyperparams['model'].items() if 'size' in key]
     mhp_list.sort()
     hyperparams['run_name'] = '_'.join(mhp_list)
