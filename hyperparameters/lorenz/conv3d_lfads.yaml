@@ -29,9 +29,9 @@ objective:
 
 model:
   channel_dims: !!python/tuple
-  - 16
   - 32
   - 64
+  - 128
   conv_dense_size: 128
   factor_size: 3
   g_encoder_size: 64
