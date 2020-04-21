@@ -214,7 +214,7 @@ def main():
     import matplotlib
     matplotlib.use('Agg')
     
-    fig_dict = plotter['valid'].plot_summary(model = model_to_plot, dl=run_manager.valid_dl, mode='video', num_average=4) #
+    fig_dict = plotter['valid'].plot_summary(model = model_to_plot, dl=run_manager.valid_dl, mode='video', num_average=4, save_dir = fig_folder) #
     for k, v in fig_dict.items():
         if type(v) == matplotlib.figure.Figure:
             v.savefig(fig_folder+k+'.svg')

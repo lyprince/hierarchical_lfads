@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import pdb
+import os
 
 from utils import batchify_random_sample
 
@@ -20,7 +21,7 @@ class Plotter(object):
         self.truth = truth
     
     #------------------------------------------------------------------------------
-    def plot_summary(self, model, dl, num_average=200, ix=None, mode='traces'):
+    def plot_summary(self, model, dl, num_average=200, ix=None, mode='traces', save_dir=None):
         
         '''
         plot_summary(data, truth=None, num_average=100, ix=None)
@@ -62,7 +63,11 @@ class Plotter(object):
         
         elif mode=='video':
             # TODO
-            pass
+#             figs_dict['videos'] = self.plot_video(recon['data'].mean(dim=0).detach().cpu().numpy(), orig)
+            save_video_dir = save_dir + 'videos/'
+            if not os.path.exists(save_video_dir):
+                os.mkdir(save_video_dir)
+            self.plot_video(recon['data'].mean(dim=0).detach().cpu().numpy(), orig, save_folder = save_video_dir)
         
         if self.truth:
             if 'rates' in self.truth.keys():
@@ -150,9 +155,24 @@ class Plotter(object):
         return fig
     
     #------------------------------------------------------------------------------
-    def plot_video(self, model, dl, num_average):
+    def plot_video(self, pred, true, save_folder): #
         # TODO
-        pass
+        # pass
+        num_frames = true.shape[1]
+        num_frames_pred = pred.shape[1]
+        
+        for t in range(num_frames):
+            fig, (ax1, ax2) = plt.subplots(1, 2, sharey=True)
+            neg1 = ax1.imshow(pred[0,t,:,:]) 
+            neg2 = ax2.imshow(true[0,t,:,:])
+            neg1.set_clim(vmin=0, vmax=2)
+            neg2.set_clim(vmin=0, vmax=2)
+            fig.savefig(save_folder+str(t)+'.png')
+            plt.close(fig)
+        
+        
+        
+        
     
     #------------------------------------------------------------------------------
     
