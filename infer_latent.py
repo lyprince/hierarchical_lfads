@@ -87,8 +87,9 @@ def main():
         for variable, val in latent_dict_k.items():
             latent_dict[dataset][variable] = np.array(latent_dict[dataset][variable])
     
-    truth_dict = {'train' : {}, 'valid' : {}}
-    for key in truth_dict:
+    truth_dict = {}
+    for key in ['train', 'valid']:
+        truth_dict[key] = {}
         for var in ['rates', 'spikes', 'latent', 'fluor']:
             data_dict_key = key + '_' + var
 #             print(data_dict_key)
@@ -97,9 +98,12 @@ def main():
                 truth_dict[key][var] = data_dict[data_dict_key]
                 if var == 'latent':
                     if data_dict_key == 'train_latent':
-                        L = fit_linear_model(np.concatenate(latent_dict[key][var]),
-                                             np.concatenate(truth_dict[key][var]))
-                    latent_dict[key]['latent_aligned'] = L.predict(latent_dict[key][var])
+                        L_train = fit_linear_model(np.concatenate(latent_dict[key][var]),
+                                                   np.concatenate(truth_dict[key][var]))
+                    latent_dict[key]['latent_aligned'] = L_train.predict(np.concatenate(latent_dict[key][var]))
+                    truth_dict[key]['latent_aligned'] = np.concatenate(truth_dict[key]['latent'])
+                
+
                 
             if var == 'fluor':
                 if model_name == 'svlae' or args.used_oasis:
@@ -116,30 +120,30 @@ def main():
 #             print(type(sub_dict['fig']))
             print('saved figure at ' + args.model_dir + 'figs/%s_%s_rsq.svg'%(key, var))
                 
+    factor_size = model.factor_size
+    if hasattr(model, 'u_latent_size'):
+        u_size = model.u_latent_size
+    elif hasattr(model, 'lfads'):
+        u_size = model.lfads.u_latent_size
+    elif hasattr(model, 'deep_model'):
+        u_size = model.deep_model.u_latent_size
+
+    train_size, steps_size, state_size = data_dict['train_%s'%args.data_suffix].shape
+    valid_size, steps_size, state_size = data_dict['valid_%s'%args.data_suffix].shape
+
+    data_size = train_size + valid_size
+
+    factors = np.zeros((data_size, steps_size, factor_size))
+    rates   = np.zeros((data_size, steps_size, state_size))
+        
     if 'train_idx' in data_dict.keys() and 'valid_idx' in data_dict.keys():
         
-        factor_size = model.factor_size
-        if hasattr(model, 'u_latent_size'):
-            u_size = model.u_latent_size
-        elif hasattr(model, 'lfads'):
-            u_size = model.lfads.u_latent_size
-        elif hasattr(model, 'deep_model'):
-            u_size = model.deep_model.u_latent_size
-
-        train_size, num_steps, num_cells = data_dict['train_data'].shape
-        valid_size, num_steps, num_cells = data_dict['valid_data'].shape
-
-        data_size = train_size + valid_size
-
-        factors = np.zeros((data_size, num_steps, factor_size))
-        rates   = np.zeros((data_size, num_steps, num_cells))
-
         if u_size > 0:
-            inputs  = np.zeros((data_size, num_steps, u_size))
+            inputs  = np.zeros((data_size, steps_size, state_size))
 
         if model_name == 'svlae' or args.used_oasis:
-            spikes  = np.zeros((data_size, num_steps, num_cells))
-            fluor   = np.zeros((data_size, num_steps, num_cells))
+            spikes  = np.zeros((data_size, steps_size, state_size))
+            fluor   = np.zeros((data_size, steps_size, state_size))
         
         train_idx = data_dict['train_idx']
         valid_idx = data_dict['valid_idx']
@@ -166,11 +170,10 @@ def main():
             fluor[train_idx] = latent_dict['train']['fluor']
             fluor[valid_idx] = latent_dict['valid']['fluor']
             latent_dict['ordered']['fluor'] = fluor
-    
         
     if factor_size == 3:
         for key in ['train', 'valid']:
-            fig = plot_3d(X=latent_dict[key]['latent_aligned'], title='rsq= %.3f'%result_dict[key]['rsq'])
+            fig = plot_3d(X=latent_dict[key]['latent_aligned'].T, title='rsq= %.3f'%results_dict[key]['latent_aligned']['rsq'])
             fig.savefig(args.model_dir + 'figs/%s_factors3d_rsq.svg'%(key))
         
     pickle.dump(latent_dict, file=open('%slatent.pkl'%args.model_dir, 'wb'))
@@ -216,23 +219,21 @@ def compute_rsquared(x, y, model=None):
         sst   = np.sum((y - ybar)**2)
         return ssr/sst
 
-def plot_3d(X, Y=None, figsize = (12, 12), view = (0, 0), title=None):
+def plot_3d(X, Y=None, figsize = (12, 12), view = (None, None), title=None):
 
     '''TBC'''
 
     assert X.shape[0] == 3, 'X data must be 3 dimensional'
-    if Y:
-        assert Y.shape[0] == 3, 'Y data must be 3 dimensional'
 
     fig = plt.figure(figsize=figsize)
     ax = fig.add_subplot(111, projection='3d')
-    ax.plot(X, lw=0.1)
-    ax.plot(Y, lw=0.1, alpha=0.7)
+    ax.plot(X[0], X[1], X[2], lw=0.1)
+    if Y:
+        assert Y.shape[0] == 3, 'Y data must be 3 dimensional'
+        ax.plot(Y[0], Y[1], Y[2], lw=0.1, alpha=0.7)
     ax.view_init(view[0], view[1])
     if title:
         ax.set_title(title, fontsize=16)
-    for legobj in leg.legendHandles:
-        legobj.set_linewidth(2.0)
     
     return fig
     

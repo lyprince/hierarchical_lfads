@@ -446,6 +446,8 @@ def prep_orion(args, hyperparams):
 
 def generate_save_loc(args, hyperparams, orion_hp_string):
     data_name = args.data_path.split('/')[-1]
+    if args.data_suffix == 'ospikes':
+        data_name += '_oasis'
     model_name = hyperparams['model_name']
     mhp_list = [key.replace('size', '').replace('deep', 'd').replace('obs', 'o').replace('_', '')[:4] + str(val) for key, val in hyperparams['model'].items() if 'size' in key]
     mhp_list.sort()
