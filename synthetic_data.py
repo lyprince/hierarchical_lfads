@@ -19,6 +19,7 @@ class DynamicalSystem():
         
     def gradient(self, state):
         pass
+
     
     def rescale(self, xt):
         return xt

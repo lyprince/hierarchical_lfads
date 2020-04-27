@@ -2,6 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import torch
 import pdb
+import os
 
 from utils import batchify_random_sample
 
@@ -20,7 +21,7 @@ class Plotter(object):
         self.truth = truth
     
     #------------------------------------------------------------------------------
-    def plot_summary(self, model, dl, num_average=200, ix=None, mode='traces'):
+    def plot_summary(self, model, dl, num_average=200, ix=None, mode='traces', save_dir=None):
         
         '''
         plot_summary(data, truth=None, num_average=100, ix=None)
@@ -37,7 +38,6 @@ class Plotter(object):
         Returns:
             - fig_dict : dict of summary figures
         '''
-        
         plt.close()
         
         figs_dict = {}
@@ -50,7 +50,7 @@ class Plotter(object):
         
         model.eval()
         with torch.no_grad():
-            recon, (factors, inputs) = model(batch_example)
+            recon, (factors, inputs), g_posterior = model(batch_example)
         
         orig = batch_example[0].cpu().numpy()
 #         print(batch_example.shape, data.shape, recon['data'].shape)
@@ -58,12 +58,16 @@ class Plotter(object):
 #         pdb.set_trace()
         
         if mode=='traces':
-            figs_dict['traces'] = self.plot_traces(recon['data'].mean(dim=0).detach().cpu().numpy(), orig, mode='activity', norm=False)
+            figs_dict['traces'] = self.plot_traces(recon['data'].mean(dim=0).detach().cpu().numpy(), orig, mode='activity', norm=True)
             figs_dict['traces'].suptitle('Actual fluorescence trace vs.\nestimated mean for a sampled trial')
         
         elif mode=='video':
             # TODO
-            pass
+#             figs_dict['videos'] = self.plot_video(recon['data'].mean(dim=0).detach().cpu().numpy(), orig)
+            save_video_dir = save_dir + 'videos/'
+            if not os.path.exists(save_video_dir):
+                os.mkdir(save_video_dir)
+            self.plot_video(recon['data'].mean(dim=0).detach().cpu().numpy(), orig, save_folder = save_video_dir)
         
         if self.truth:
             if 'rates' in self.truth.keys():
@@ -133,9 +137,18 @@ class Plotter(object):
             idxs  = list(range(num_cells))
         
         for ii, (ax,idx) in enumerate(zip(axs,idxs)):
-            plt.sca(ax)
-            plt.plot(self.time, true[:, idx], lw=2, color=self.colors['linc_red'])
-            plt.plot(self.time, pred[:, idx], lw=2, color=self.colors['linc_blue'])
+            if norm is True:
+                true_norm= (true[:, idx] - np.mean(true[:, idx]))/np.std(true[:, idx])
+                pred_norm= (pred[:, idx] - np.mean(pred[:, idx]))/np.std(pred[:, idx])
+                
+                plt.sca(ax)
+                plt.plot(self.time, true_norm, lw=2, color=self.colors['linc_red'])
+                plt.plot(self.time, pred_norm, lw=2, color=self.colors['linc_blue'])
+            
+            else:
+                plt.sca(ax)
+                plt.plot(self.time, true[:, idx], lw=2, color=self.colors['linc_red'])
+                plt.plot(self.time, pred[:, idx], lw=2, color=self.colors['linc_blue'])
                 
         fig.subplots_adjust(wspace=0.1, hspace=0.1)
         plt.legend(['Actual', 'Reconstructed'])
@@ -143,9 +156,24 @@ class Plotter(object):
         return fig
     
     #------------------------------------------------------------------------------
-    def plot_video(self, model, dl, num_average):
+    def plot_video(self, pred, true, save_folder): #
         # TODO
-        pass
+        # pass
+        num_frames = true.shape[1]
+        num_frames_pred = pred.shape[1]
+        
+        for t in range(num_frames):
+            fig, (ax1, ax2) = plt.subplots(1, 2, sharey=True)
+            neg1 = ax1.imshow(pred[0,t,:,:]) 
+            neg2 = ax2.imshow(true[0,t,:,:])
+            neg1.set_clim(vmin=0, vmax=2)
+            neg2.set_clim(vmin=0, vmax=2)
+            fig.savefig(save_folder+str(t)+'.png')
+            plt.close(fig)
+        
+        
+        
+        
     
     #------------------------------------------------------------------------------
     

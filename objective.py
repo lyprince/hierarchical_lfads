@@ -151,16 +151,24 @@ class Conv_LFADS_Loss(LFADS_Loss):
                                               l2_gen_scale=l2_gen_scale)
         
         
-    def forward(self, x_orig, x_recon, model):
+    def forward(self, x_orig, x_recon, g_posterior, model):
         kl_weight = self.loss_weights['kl']['weight']
         l2_weight = self.loss_weights['l2']['weight']
-        recon_loss = -self.loglikelihood(x_orig, x_recon['data'])
-
-        kl_loss = kl_weight * kldiv_gaussian_gaussian(post_mu  = model.lfads.g_posterior_mean.to(torch.float32),
-                                                      post_lv  = model.lfads.g_posterior_logvar.to(torch.float32),
-                                                      prior_mu = model.lfads.g_prior_mean.to(torch.float32),
-                                                      prior_lv = model.lfads.g_prior_logvar.to(torch.float32)).to(dtype=x_orig.dtype)
-    
+        recon_loss = self.loglikelihood(x_orig, x_recon['data'])
+        
+#         kl_loss = 1.0
+        g_posterior_mean = g_posterior['mean']#model.g_posterior_mean
+        g_posterior_logvar = g_posterior['logvar']#model.g_posterior_logvar
+        g_prior_mean = model.g_prior_mean
+        g_prior_logvar = model.g_prior_logvar
+        
+        kl_loss = kl_weight * kldiv_gaussian_gaussian(post_mu  = g_posterior_mean.to(torch.float32),
+                                                      post_lv  = g_posterior_logvar.to(torch.float32),
+                                                      prior_mu = g_prior_mean.to(torch.float32),
+                                                      prior_lv = g_prior_logvar.to(torch.float32)).to(dtype=x_orig.dtype)
+#         kl_loss = kl_weight * kldiv_gaussian_gaussian(post_mu  = model.lfads.g_posterior_mean.to(torch.float32), post_lv  = model.lfads.g_posterior_logvar.to(torch.float32), prior_mu = model.lfads.g_prior_mean.to(torch.float32), prior_lv = model.lfads.g_prior_logvar.to(torch.float32)).to(dtype=x_orig.dtype)
+        
+#         l2_loss = 1.0
         l2_loss = 0.5 * l2_weight * self.l2_gen_scale * model.lfads.generator.gru_generator.hidden_weight_l2_norm()
     
         if hasattr(model, 'controller'):
