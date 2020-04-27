@@ -37,6 +37,7 @@ def write_data(data_fname, data_dict, use_json=False, compression=None):
                             print('Saving variable with name: ', clean_k)
                     else:
                         clean_k = k
+
                     hf.create_dataset(clean_k, data=v, compression=compression)
         except IOError:
             print("Cannot open %s for writing.", data_fname)
@@ -61,6 +62,12 @@ def read_data(data_fname):
         print("Cannot open %s for reading." % data_fname)
         raise
         
+def batchify_sample(sample, batch_size):
+    if not torch.is_tensor(sample):
+        sample = torch.Tensor(sample)
+    batch = sample.unsqueeze(0).repeat(batch_size, *(1,)*(sample.ndimension()))
+    return batch
+        
 def batchify_random_sample(data, batch_size, ix=None):
     
     """
@@ -81,12 +88,8 @@ def batchify_random_sample(data, batch_size, ix=None):
     num_trials = data.shape[0]
     if type(ix) is not int:
         ix = np.random.randint(num_trials)
-    if torch.is_tensor(data[ix]):
-        sample = data[ix]
-    else:
-        sample = torch.from_numpy(data[ix])
-#         print(sample.shape)
-    batch = sample.unsqueeze(0).repeat(batch_size, *(1,)*(sample.ndimension()))
+    sample = data[ix]
+    batch = batchify_sample(sample, batch_size)
     return batch, ix
 
 def update_param_dict(prev_params, new_params):
@@ -99,8 +102,7 @@ def update_param_dict(prev_params, new_params):
 def load_parameters(path):
     return yaml.load(open(path), Loader=yaml.FullLoader)
 
-def save_parameters(params, output='.', path=None):
-    save_loc = '%s/models/%s_%s/%s/'%(output, params['dataset_name'], params['datatype'], params['run_name'])
+def save_parameters(save_loc, params):
     if not os.path.isdir(save_loc):
         os.makedirs(save_loc)
-    yaml.dump(params, open(save_loc + 'parameters.yaml', 'w'), default_flow_style=False)
+    yaml.dump(params, open(save_loc + 'hyperparameters.yaml', 'w'), default_flow_style=False)

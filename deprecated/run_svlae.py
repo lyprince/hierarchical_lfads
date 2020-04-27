@@ -71,7 +71,6 @@ def main():
         orion_hp_string += 'kl_deep_max= %.3f\n'%(args.kl_deep_max)
     
     if args.deep_start_p:
-        print('deep_start found')
         deep_start = int(args.deep_start_p * args.deep_start_p_scale * hyperparams['objective']['kl_obs']['schedule_dur'])
         hyperparams['objective']['kl_deep']['schedule_start'] = deep_start
         hyperparams['objective']['l2']['schedule_start'] = deep_start
