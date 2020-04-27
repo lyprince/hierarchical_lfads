@@ -95,7 +95,7 @@ class Conv3d_LFADS_Net(nn.Module):
         
     def forward(self, x):
         
-        frame_per_block = 10
+        frame_per_block = 5
         batch_size, num_ch, seq_len, w, h = x.shape
         num_blocks = int(seq_len/frame_per_block)
         
