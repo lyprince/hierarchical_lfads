@@ -153,12 +153,14 @@ class Conv3d_LFADS_Net(nn.Module):
         x = x.view(batch_size, 1, seq_len, w, h)
         
         g_posterior = dict()
-        g_posterior['mean'] = self.lfads.g_posterior_mean
-        g_posterior['logvar'] = self.lfads.g_posterior_logvar
+#         g_posterior['mean'] = self.lfads.g_posterior_mean
+#         g_posterior['logvar'] = self.lfads.g_posterior_logvar
+        g_posterior_mean = self.lfads.g_posterior_mean
+        g_posterior_logvar = self.lfads.g_posterior_logvar
         
         recon = {'data' : x}
 
-        return recon, (factors, gen_inputs), g_posterior
+        return recon, (factors, gen_inputs), (g_posterior_mean,g_posterior_logvar)
     
     def normalize_factors(self):
         self.lfads.normalize_factors()

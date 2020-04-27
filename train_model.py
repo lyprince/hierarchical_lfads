@@ -5,18 +5,23 @@ import os
 
 import torch
 import torchvision
+import torch.nn as nn
 import torch.optim as opt
 import torchvision.transforms as trf
 
-from orion.client import report_results
+# from orion.client import report_results
 
 from trainer import RunManager
 from scheduler import LFADS_Scheduler
+from synthetic_data import SyntheticCalciumVideoDataset
 
 from utils import read_data, load_parameters, save_parameters
 from plotter import Plotter
 
 import pdb
+
+torch.backends.cudnn.benchmark = True
+torch.backends.cudnn.enabled = True
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-m', '--model', type=str)
@@ -27,6 +32,7 @@ parser.add_argument('--max_epochs', default=2000, type=int)
 parser.add_argument('--batch_size', default=None, type=int)
 parser.add_argument('--data_suffix', default='data', type=str)
 parser.add_argument('--detect_local_minima', action='store_true', default=False)
+parser.add_argument('--gpu', default='0,1', type=str)
 
 parser.add_argument('-t', '--use_tensorboard', action='store_true', default=False)
 parser.add_argument('-r', '--restart', action='store_true', default=False)
@@ -48,7 +54,12 @@ parser.add_argument('--log10_l2_con_scale', type=float, default=None)
 def main():
     args = parser.parse_args()
     
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    os.environ["CUDA_VISIBLE_DEVICES"]=str(args.gpu)
+    if torch.cuda.is_available():
+        device = torch.device('cuda')
+    else:
+        device = 'cpu'
+
 
     hyperparams = load_parameters(args.hyperparameter_path)
     
@@ -97,8 +108,15 @@ def main():
                              detect_local_minima = args.detect_local_minima)
 
     run_manager.run()
-        
-    save_figs(save_loc, run_manager.model, run_manager.valid_dl, plotter)
+     
+    
+    
+    if args.model == 'conv3d_lfads':
+        model_to_plot = load_model(save_loc, hyperparams, model_name = args.model, input_dims = run_manager.model.input_dims)
+        save_figs(save_loc, model_to_plot, run_manager.valid_dl, plotter)
+    else:
+        save_figs(save_loc, run_manager.model, run_manager.valid_dl, plotter)
+    
 
 #-------------------------------------------------------------------
 #-------------------------------------------------------------------
@@ -188,7 +206,7 @@ def prep_conv3d_lfads(input_dims, hyperparams, device, dtype):
     from objective import Conv_LFADS_Loss, LogLikelihoodGaussian
     from conv_lfads import Conv3d_LFADS_Net
     
-    model = Conv3d_LFADS_Net(input_dims      = (num_steps, width, height),
+    model = Conv3d_LFADS_Net(input_dims      = input_dims,#(num_steps, width, height),
                              channel_dims    = hyperparams['model']['channel_dims'],
                              factor_size     = hyperparams['model']['factor_size'],
                              g_encoder_size  = hyperparams['model']['g_encoder_size'],
@@ -203,7 +221,9 @@ def prep_conv3d_lfads(input_dims, hyperparams, device, dtype):
                              lfads_dropout   = hyperparams['model']['lfads_dropout'],
                              do_normalize_factors = hyperparams['model']['normalize_factors'],
                              max_norm        = hyperparams['model']['max_norm'],
-                             device          = device).to(device)
+                             device          = device)
+    
+    model = _CustomDataParallel(model).to(device)
     
     model.to(dtype=dtype)
     torch.set_default_dtype(dtype)
@@ -308,8 +328,8 @@ def prep_data(data_dict, data_suffix, batch_size, device):
 #-------------------------------------------------------------------
     
 def prep_video(data_dict, batch_size, device):
-    train_dl    = torch.utils.data.DataLoader(SyntheticCalciumVideoDataset(traces= data_dict['train_fluor'], cells=data_dict['cells'], device=device), batch_size=args.batch_size)
-    valid_dl    = torch.utils.data.DataLoader(SyntheticCalciumVideoDataset(traces= data_dict['valid_fluor'], cells=data_dict['cells'], device=device), batch_size=args.batch_size)
+    train_dl    = torch.utils.data.DataLoader(SyntheticCalciumVideoDataset(traces= data_dict['train_fluor'], cells=data_dict['cells'], device=device), batch_size=batch_size)
+    valid_dl    = torch.utils.data.DataLoader(SyntheticCalciumVideoDataset(traces= data_dict['valid_fluor'], cells=data_dict['cells'], device=device), batch_size=batch_size)
     
     num_trials, num_steps, num_cells = data_dict['train_fluor'].shape
     num_cells, width, height = data_dict['cells'].shape
@@ -329,7 +349,7 @@ def prep_video(data_dict, batch_size, device):
     plotter = {'train' : Plotter(time=TIME, truth=train_truth),
                'valid' : Plotter(time=TIME, truth=valid_truth)}
     
-    return train_dl, valid_dl, input_size, plotter
+    return train_dl, valid_dl, input_dims, plotter
 
 #-------------------------------------------------------------------
 #-------------------------------------------------------------------
@@ -460,6 +480,7 @@ def generate_save_loc(args, hyperparams, orion_hp_string):
 #-------------------------------------------------------------------
     
 def save_figs(save_loc, model, dl, plotter):
+        
     fig_folder = save_loc + 'figs/'
     
     if os.path.exists(fig_folder):
@@ -469,13 +490,63 @@ def save_figs(save_loc, model, dl, plotter):
     from matplotlib.figure import Figure
     import matplotlib
     matplotlib.use('Agg')
-    fig_dict = plotter['valid'].plot_summary(model= model, dl= dl)
+    fig_dict = plotter['valid'].plot_summary(model= model_to_plot, dl= dl)
     for k, v in fig_dict.items():
         if type(v) == Figure:
             v.savefig(fig_folder+k+'.svg')
 
+            
+def load_model(save_loc, hyperparams, model_name, input_dims):
+    
+    if model_name == 'conv3d_lfads':
+
+        model = Conv3d_LFADS_Net(input_dims      = input_dims,
+                    conv_dense_size = hyperparams['model']['conv_dense_size'],
+                    channel_dims    = hyperparams['model']['channel_dims'],
+                    factor_size     = hyperparams['model']['factor_size'],
+                    g_encoder_size  = hyperparams['model']['g_encoder_size'],
+                    c_encoder_size  = hyperparams['model']['c_encoder_size'],
+                    g_latent_size   = hyperparams['model']['g_latent_size'],
+                    u_latent_size   = hyperparams['model']['u_latent_size'],
+                    controller_size = hyperparams['model']['controller_size'],
+                    generator_size  = hyperparams['model']['generator_size'],
+                    prior           = hyperparams['model']['prior'],
+                    clip_val        = hyperparams['model']['clip_val'],
+                    conv_dropout    = hyperparams['model']['conv_dropout'],
+                    lfads_dropout   = hyperparams['model']['lfads_dropout'],
+                    do_normalize_factors = hyperparams['model']['normalize_factors'],
+                    max_norm        = hyperparams['model']['max_norm'],
+                    device          = 'cuda:0')
+        state_dict = torch.load(save_loc + 'checkpoints/'+'best.pth')
+        model.load_state_dict(state_dict['net'])
+        model = model.to('cuda:0')
+        
+    elif model_name == 'lfads':
+        #TO_DO
+        pass
+    
+    elif model_name == 'svlae':
+        #TO_DO
+        pass
+    
+    return model
+    
+    
 #-------------------------------------------------------------------
 #-------------------------------------------------------------------
 
+class _CustomDataParallel(nn.DataParallel):
+    def __init__(self, model):
+        super(_CustomDataParallel, self).__init__(model)
+
+    def __getattr__(self, name):
+        try:
+            return super(_CustomDataParallel, self).__getattr__(name)
+        except AttributeError:
+            return getattr(self.module, name)
+
+#-------------------------------------------------------------------
+#-------------------------------------------------------------------
+        
 if __name__ == '__main__':
     main()

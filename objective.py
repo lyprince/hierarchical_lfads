@@ -157,8 +157,10 @@ class Conv_LFADS_Loss(LFADS_Loss):
         recon_loss = self.loglikelihood(x_orig, x_recon['data'])
         
 #         kl_loss = 1.0
-        g_posterior_mean = g_posterior['mean']#model.g_posterior_mean
-        g_posterior_logvar = g_posterior['logvar']#model.g_posterior_logvar
+#         g_posterior_mean = g_posterior['mean']#model.g_posterior_mean
+#         g_posterior_logvar = g_posterior['logvar']#model.g_posterior_logvar
+        g_posterior_mean = g_posterior[0]
+        g_posterior_logvar = g_posterior[1]
         g_prior_mean = model.g_prior_mean
         g_prior_logvar = model.g_prior_logvar
         
