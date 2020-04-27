@@ -21,7 +21,8 @@ def main():
     dir_name = os.path.dirname(args.data_path)
     
     data_dict = read_data(args.data_path)
-    g = np.exp(-data_dict['dt']/args.tau)
+    dt = data_dict['dt']
+    g = np.exp(-dt/args.tau)
     
     train_size, steps_size, state_size = data_dict['train_fluor'].shape
     valid_size, steps_size, state_size = data_dict['valid_fluor'].shape
@@ -51,10 +52,10 @@ def main():
     else:
         if args.normalize:
             data = max_normalize(data.T, axis=0).T
-        S, C, bias, tau, gain, rval = deconvolve_calcium_unknown(data,
-                                                                 g=g,
-                                                                 snr_thresh=args.scale,
-                                                                 discard_low_signal=args.flatten)
+        S, C, bias, G, gain, rval = deconvolve_calcium_unknown(data,
+                                                               g=g,
+                                                               snr_thresh=args.scale)
+        tau = -dt/(np.log(G))
         
     if args.flatten:
         data = data.reshape(data_size, steps_size, state_size)
@@ -102,8 +103,12 @@ def main():
         data_dict['obs_tau_init'] = tau
         data_dict['obs_var_init'] = (gain/args.scale)**2
     
+    arg_string =  '_o%s'%('k' if args.known else 'u')
+    arg_string += '_t%s'%(str(args.tau))
+    arg_string += '_s%s'%(str(args.scale))
+    arg_string.replace('.', '-')
     
-    write_data(os.path.join(dir_name, data_name) + '_o%s'%('k' if args.known else 'u'), data_dict)
+    write_data(os.path.join(dir_name, data_name) + arg_string, data_dict)
 
 def deconvolve_calcium_known(X, g=0.9, s_min=0.5):
     S = np.zeros_like(X)
@@ -124,41 +129,45 @@ def deconvolve_calcium_unknown(X, g=0.9, snr_thresh=3):
     
     B = []
     G = []
-    T = []
     L = []
     M = []
     R = []
-    D = []
+    
+    b_init = compute_mode(X)
+    
     for ix, x in enumerate(X):
-        c, s, b, g, lam = oasis.functions.deconvolve(x, penalty=1, g=[g], optimize_g=1)
+        c, s, b, g, lam = oasis.functions.deconvolve(x, b=b_init, g=[g], penalty=1, max_iter=5)
         sn = (x-c).std(ddof=1)
-        c, s, b, g, lam = oasis.functions.deconvolve(x, penalty=1, g=[g], optimize_g=1, sn=sn)
+        c, s, b, g, lam = oasis.functions.deconvolve(x, b=b, penalty=1, g=[g], sn=sn, max_iter=5)
         sn = (x-c).std(ddof=1)
         c, s = oasis.oasis_methods.oasisAR1(x-b, g=g, lam=lam, s_min=sn*snr_thresh)
         r = np.corrcoef(c, x)[0, 1]
         
         S[ix] = np.round(s/(sn*snr_thresh))
-        C[ix] = x
+        C[ix] = c
         
         B.append(b)
         G.append(g)
-        T.append(-1/(np.log(g)*fps))
         L.append(lam)
         M.append(sn * snr_thresh)
-        R.append(r_valid)
-        D.append(r_train - r_valid)
+        R.append(r)
             
     B = np.array(B)
     G = np.array(G) 
-    T = np.array(T) 
     L = np.array(L)
     M = np.array(M)
     R = np.array(R)
     
-    return S, C, B, T, M, R
+    return S, C, B, G, M, R
 
 def max_normalize(X, axis=0):
-    return (X - np.median(X, axis=axis))/X.max()
+    X = X - compute_mode(X)
+    return X/X.max()
+
+def compute_mode(X):
+    h, b  = np.histogram(X.ravel(), bins='auto')
+    xvals = (b[1:] + b[:-1])/2
+    return xvals[h.argmax()]
 
 if __name__ == '__main__':
     main()

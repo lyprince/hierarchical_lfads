@@ -21,7 +21,6 @@ parser = argparse.ArgumentParser()
 parser.add_argument('-m', '--model_dir', type=str)
 parser.add_argument('-d', '--data_path', type=str)
 parser.add_argument('-n', '--num_average', default=200, type=int)
-parser.add_argument('-o', '--used_oasis', action='store_true', default=False)
 parser.add_argument('--data_suffix', default='data', type=str)
 
 def main():
@@ -79,7 +78,7 @@ def main():
                         latent_dict[key]['inputs'] = []
                     latent_dict[key]['inputs'].append(result['inputs'])
                     
-            if args.used_oasis:
+            if args.data_suffix == 'ospikes':
                 latent_dict[key]['spikes'] = data_dict[key+'_ospikes']
                 latent_dict[key]['fluor'] = data_dict[key+'_ocalcium']
     
@@ -105,10 +104,10 @@ def main():
                 
 
                 
-            if var == 'fluor':
-                if model_name == 'svlae' or args.used_oasis:
-                    data_dict_key = key + '_data'
-                    truth_dict[key][var] = data_dict[data_dict_key]
+#             if var == 'fluor':
+#                 if model_name == 'svlae' or args.data_suffix == :
+#                     data_dict_key = key + '_data'
+#                     truth_dict[key][var] = data_dict[data_dict_key]
     
     results_dict = {}
     for key in ['train', 'valid']:
@@ -141,7 +140,7 @@ def main():
         if u_size > 0:
             inputs  = np.zeros((data_size, steps_size, state_size))
 
-        if model_name == 'svlae' or args.used_oasis:
+        if model_name == 'svlae' or args.data_suffix == 'ospikes':
             spikes  = np.zeros((data_size, steps_size, state_size))
             fluor   = np.zeros((data_size, steps_size, state_size))
         
@@ -163,7 +162,7 @@ def main():
             inputs[valid_idx] = latent_dict['valid']['inputs']
             latent_dict['ordered']['inputs'] = inputs
 
-        if model_name == 'svlae' or args.used_oasis:
+        if model_name == 'svlae' or args.data_suffix == 'ospikes':
             spikes[train_idx] = latent_dict['train']['spikes']
             spikes[valid_idx] = latent_dict['valid']['spikes']
             latent_dict['ordered']['spikes'] = spikes
@@ -210,14 +209,8 @@ def compute_rsquared(x, y, model=None):
     if model is not None:
         return model(x, y).score()
     else:
-#         print(x.shape)
-#         print(y.shape)
-        coefs = np.polyfit(x, y, deg=1)
-        yhat  = np.poly1d(coefs)(x)
-        ybar  = np.ravel(y).mean()
-        ssr   = np.sum((yhat - ybar)**2)
-        sst   = np.sum((y - ybar)**2)
-        return ssr/sst
+        return np.corrcoef(x, y)[0, 1]**2
+        
 
 def plot_3d(X, Y=None, figsize = (12, 12), view = (None, None), title=None):
 

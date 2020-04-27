@@ -93,7 +93,7 @@ class EmbeddedLowDNetwork(DynamicalSystem):
         
 class ChaoticNetwork(DynamicalSystem):
     
-    def __init__(self, num_inits=100, max_rate = 50.0, net_size=64, weight_scale=2.5, dt= 0.01, inputs=None):
+    def __init__(self, num_inits=100, max_rate = 50.0, net_size=64, weight_scale=5.0, dt= 0.01, inputs=None):
         self.dt = dt
         self.max_rate = max_rate
         self.num_inits = num_inits

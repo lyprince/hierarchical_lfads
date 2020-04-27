@@ -18,6 +18,7 @@ parser.add_argument('--rate_scale', default=5.0, type=float)
 parser.add_argument('--trainp', default=0.8, type=float)
 parser.add_argument('--dt_spike', default=0.01, type=float)
 parser.add_argument('--dt_sys', default=0.01, type=float)
+parser.add_argument('--burn_steps', default=0, type=int)
 
 def main():
     args = parser.parse_args()
@@ -41,7 +42,7 @@ def main():
     elif args.system == 'chaotic-rnn':
         from synthetic_data import ChaoticNetwork, RandomPerturbation
         
-        inputs = RandomPerturbation(t_span=[0.25, 0.75], scale=20)
+        inputs = RandomPerturbation(t_span=[0.25, 0.75], scale=10)
         
         net = ChaoticNetwork(num_inits= args.inits,
                              max_rate= args.rate_scale,
@@ -55,7 +56,7 @@ def main():
     generator = SyntheticCalciumDataGenerator(system     = net,
                                               seed       = args.seed,
                                               trainp     = args.trainp,
-                                              burn_steps = 1000,
+                                              burn_steps = args.burn_steps,
                                               num_steps  = args.steps,
                                               num_trials = args.trials,
                                               tau_cal    = 0.3,
