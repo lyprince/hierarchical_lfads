@@ -86,10 +86,11 @@ class Plotter(object):
                 figs_dict['factors'] = self.plot_factors(factors.mean(dim=1).cpu().numpy())
                 
             if 'spikes' in self.truth.keys():
-                recon_spikes = recon['spikes'].mean(dim=1).cpu().numpy()
-                true_spikes  = self.truth['spikes'][ix]
-                figs_dict['truth_spikes'] = self.plot_traces(recon_spikes, true_spikes, mode='rand')
-                figs_dict['truth_spikes'].suptitle('Reconstructed vs ground-truth rate function')
+                if 'spikes' in recon.keys():
+                    recon_spikes = recon['spikes'].mean(dim=1).cpu().numpy()
+                    true_spikes  = self.truth['spikes'][ix]
+                    figs_dict['truth_spikes'] = self.plot_traces(recon_spikes, true_spikes, mode='rand')
+                    figs_dict['truth_spikes'].suptitle('Reconstructed vs ground-truth rate function')
         
         else:
             figs_dict['factors'] = self.plot_factors(factors.mean(dim=1).cpu().numpy())

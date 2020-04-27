@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from lfads import LFADS_Net, LFADS_Encoder, LFADS_ControllerCell
-from math import log
+from numpy import log
 import pdb
 
 class SVLAE_Net(nn.Module):
@@ -96,7 +96,7 @@ class SVLAE_Net(nn.Module):
             for p in self.deep_model.parameters():
                 p.requires_grad = False
                 
-        if self.ar1_start_step > 0:
+        if self.ar1_start_step:
             for p in self.obs_model.generator.calcium_generator.parameters():
                 p.requires_grad = False
             self.obs_model.generator.calcium_generator.logvar.requires_grad = True
@@ -146,10 +146,13 @@ class SVLAE_Net(nn.Module):
             if self.deep_c_encoder_size > 0 and self.deep_controller_size > 0 and self.deep_u_latent_size > 0:
 
                 deep_u_mean, deep_u_logvar, deep_controller_state = self.deep_model.controller(torch.cat((out_deep_c_enc[t], factor_state), dim=1), deep_controller_state)
+#                 pdb.set_trace()
 
-                self.deep_model.u_posterior_mean = torch.cat((self.deep_model.u_posterior_mean, deep_u_mean.unsqueeze(0)), dim=0)
-                self.deep_model.u_posterior_logvar = torch.cat((self.deep_model.u_posterior_logvar, deep_u_logvar.unsqueeze(0)), dim=0)
-                deep_generator_input = self.deep_model.sample_gaussian(self.deep_model.u_posterior_mean, self.deep_model.u_posterior_logvar)
+                self.deep_model.u_posterior_mean = torch.cat((self.deep_model.u_posterior_mean, deep_u_mean.unsqueeze(1)), dim=1)
+                self.deep_model.u_posterior_logvar = torch.cat((self.deep_model.u_posterior_logvar, deep_u_logvar.unsqueeze(1)), dim=1)
+
+                deep_generator_input = self.deep_model.sample_gaussian(deep_u_mean, deep_u_logvar)
+#                 pdb.set_trace()
                 deep_gen_inputs = torch.cat((deep_gen_inputs, deep_generator_input.unsqueeze(0)), dim=0)
             else:
                 deep_generator_input = torch.empty(self.batch_size, self.deep_u_latent_size, device=self.device)
@@ -205,7 +208,7 @@ class SVLAE_Net(nn.Module):
             if loading_checkpoint:
                 return run_step >= status_step
             else:
-                return run_step == status_steps
+                return run_step == status_step
         
         if step_condition(step, self.deep_unfreeze_step, loading_checkpoint):
             print('Unfreezing deep model parameters', flush=True)

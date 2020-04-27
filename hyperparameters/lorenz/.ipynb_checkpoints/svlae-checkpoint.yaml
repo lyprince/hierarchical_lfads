@@ -56,14 +56,14 @@ model:
       value: 1.0
       learnable: false
     tau: 
-      value: 0.4
-      learnable: True
+      value: 0.3
+      learnable: False
     bias:
       value: 0.0
       learnable: false
     var:
-      value: 0.1
-      learnable: True
+      value: 0.04
+      learnable: false
   
   prior:
     obs:
@@ -92,6 +92,6 @@ model:
   deep_unfreeze_step: 1600
   obs_early_stop_step: null
   obs_continue_step: null
-  ar1_start_step: 3200
+  ar1_start_step: null
 
 model_name: svlae

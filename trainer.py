@@ -10,7 +10,7 @@ import functools, collections, operator
 class RunManager():
     def __init__(self, model, objective, optimizer, scheduler,
                  train_dl, valid_dl, transforms,
-                 plotter=None, writer=None, do_health_check=False,
+                 plotter=None, writer=None, do_health_check=False, detect_local_minima = False,
                  max_epochs=1000, save_loc = '/tmp/', load_checkpoint=False):
     
         self.device     = 'cuda' if torch.cuda.is_available() else 'cpu';
@@ -26,6 +26,7 @@ class RunManager():
             
         self.max_epochs      = max_epochs
         self.do_health_check = do_health_check
+        self.detect_local_minima = detect_local_minima
         self.save_loc        = save_loc
         
         self.epoch = 0
@@ -176,19 +177,20 @@ class RunManager():
             print(results_string, flush=True)
             
             # Check if local minima with 0 KL or L2 loss reached
-            in_local_minima = False
-            if not self.objective.any_zero_weights():
-                for key,val in self.loss_dict['valid'].items():
-                    if ('kl' in key or 'l2' in key):
-                        if val[-1] / self.objective.loss_weights[key]['weight'] < 0.1:
-                            in_local_minima = True
-                    else:
-                        if val[-1] < 0.1:
-                            in_local_minima = True
-                            
-            if in_local_minima:
-                print('Stuck in local minima')
-                break
+            if self.detect_local_minima:
+                in_local_minima = False
+                if not self.objective.any_zero_weights():
+                    for key,val in self.loss_dict['valid'].items():
+                        if ('kl' in key or 'l2' in key):
+                            if torch._np.abs(val[-1] / self.objective.loss_weights[key]['weight']) < 0.1:
+                                in_local_minima = True
+                        else:
+                            if torch._np.abs(val[-1]) < 0.1:
+                                in_local_minima = True
+
+                if in_local_minima:
+                    print('Stuck in local minima')
+                    break
             
     def write_to_tensorboard(self):
         
