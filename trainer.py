@@ -57,12 +57,11 @@ class RunManager():
                 
                 self.optimizer.zero_grad()
                 fw_tic = time.time()
-                recon, latent, g = self.model(x)
+                recon, latent = self.model(x)
 #                 print('fw time: ', time.time()-fw_tic)
                 loss_tic = time.time()
                 loss, loss_dict = self.objective(x_orig= x,
                                                  x_recon= recon,
-                                                 g_posterior = g,
                                                  model= self.model)                
 #                 print('loss time: ', time.time()-loss_tic)
                 loss_dict_list.append(loss_dict)
@@ -88,8 +87,6 @@ class RunManager():
 
                     # Row-normalise fc_factors (See bullet-point 11 of section 1.9 of online methods)
                     
-                
-                
                 self.optimizer, self.scheduler = self.model.change_parameter_grad_status(self.step, self.optimizer, self.scheduler)
                 
                 self.step += 1
@@ -122,9 +119,9 @@ class RunManager():
                 with torch.no_grad():
                     x = x[0]
                     fw_val_tic = time.time()
-                    recon, latent, g = self.model(x)
+                    recon, latent = self.model(x)
 #                     print('fw val time: ',time.time()-fw_val_tic)
-                    loss, loss_dict = self.objective(x_orig= x, x_recon= recon, g_posterior = g, model= self.model)
+                    loss, loss_dict = self.objective(x_orig= x, x_recon= recon, model= self.model)
                     loss_dict_list.append(loss_dict)
                     
             valid_data = x.clone()
@@ -257,7 +254,7 @@ class RunManager():
         if not os.path.isdir(self.save_loc+'checkpoints/'):
             os.mkdir(self.save_loc+'checkpoints/')
         
-        torch.save({'net' : self.model.module.state_dict(), 'opt' : self.optimizer.state_dict(),
+        torch.save({'net' : self.model.state_dict(), 'opt' : self.optimizer.state_dict(),
                     'sched': self.scheduler.state_dict(), 'run_manager' : train_dict},
                      self.save_loc+'checkpoints/' + output_filename + '.pth')
         

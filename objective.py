@@ -206,7 +206,7 @@ class LogLikelihoodGaussian(nn.Module):
         if logvar is not None:
             return loglikelihood_gaussian(x, mean, logvar)
         else:
-            -return torch.nn.functional.mse_loss(x, mean, reduction='sum')/x.shape[0]
+            return -torch.nn.functional.mse_loss(x, mean, reduction='sum')/x.shape[0]
     
 def loglikelihood_gaussian(x, mean, logvar):
     from math import pi

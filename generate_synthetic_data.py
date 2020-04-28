@@ -45,7 +45,7 @@ def main():
         inputs = RandomPerturbation(t_span=[0.25, 0.75], scale=10)
         
         net = ChaoticNetwork(num_inits= args.inits,
-                             max_rate= args.rate_scale,
+                             base_rate= args.rate_scale,
                              net_size = args.cells,
                              weight_scale = 2.5,
                              dt=args.dt_sys,

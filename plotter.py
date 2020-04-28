@@ -50,7 +50,7 @@ class Plotter(object):
         
         model.eval()
         with torch.no_grad():
-            recon, (factors, inputs), g_posterior = model(batch_example)
+            recon, (factors, inputs) = model(batch_example)
         
         orig = batch_example[0].cpu().numpy()
 #         print(batch_example.shape, data.shape, recon['data'].shape)
