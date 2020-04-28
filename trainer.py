@@ -49,47 +49,58 @@ class RunManager():
             loss_dict_list = []
             
             self.model.train()
+#             print(len(self.train_dl))
             for i,x in enumerate(self.train_dl):
+                tr_tic = time.time()
 #                 print(x[0].session)
                 x = x[0]
+                
                 self.optimizer.zero_grad()
-                recon, latent = self.model(x)
+                fw_tic = time.time()
+                recon, latent, g = self.model(x)
+#                 print('fw time: ', time.time()-fw_tic)
+                loss_tic = time.time()
                 loss, loss_dict = self.objective(x_orig= x,
                                                  x_recon= recon,
-                                                 model= self.model)
-                
+                                                 g_posterior = g,
+                                                 model= self.model)                
+#                 print('loss time: ', time.time()-loss_tic)
                 loss_dict_list.append(loss_dict)
                 
 
                 bw_tic = time.time()
                 loss.backward()
-                bw_toc = time.time()
+#                 print('bw time: ', time.time()-bw_tic)
                 
-                if torch.isnan(loss.data):
-                    break
-                
+#                 if torch.isnan(loss.data):
+#                     break
+
                 # Clip gradient norm
                 torch.nn.utils.clip_grad_norm_(self.model.parameters(), max_norm=self.model.max_norm)
-            
                 # update the weights
                 self.optimizer.step()
+
                 
                 self.objective.weight_schedule_fn(self.step)
                 
                 if self.model.do_normalize_factors:
-                    # Row-normalise fc_factors (See bullet-point 11 of section 1.9 of online methods)
                     self.model.normalize_factors()
+
+                    # Row-normalise fc_factors (See bullet-point 11 of section 1.9 of online methods)
                     
-                self.optimizer, self.scheduler = self.model.change_parameter_grad_status(self.step, self.optimizer, self.scheduler)
-                                        
-                self.step += 1
                 
-            if torch.isnan(loss.data):
-                print('Loss is NaN')
-                break
-              
+                
+                self.optimizer, self.scheduler = self.model.change_parameter_grad_status(self.step, self.optimizer, self.scheduler)
+                
+                self.step += 1
+            #if torch.isnan(loss.data):
+            #    print('Loss is NaN')
+            #    break
+            
+            
             train_data = x.clone()
             loss_dict = {} 
+            
             for d in loss_dict_list: 
                 for k in d.keys(): 
                     loss_dict[k] = loss_dict.get(k, 0) + d[k]/len(loss_dict_list)
@@ -101,16 +112,19 @@ class RunManager():
                 else:
                     self.loss_dict['train'][key] = [loss_dict[key]]
             
+            
+
             self.scheduler.step(self.loss_dict['train']['total'][-1])
-
-
             loss_dict_list = []
             self.model.eval()
+#             print(len(self.valid_dl))
             for i, x in enumerate(self.valid_dl):
                 with torch.no_grad():
                     x = x[0]
-                    recon, latent = self.model(x)
-                    loss, loss_dict = self.objective(x_orig= x, x_recon= recon, model= self.model)
+                    fw_val_tic = time.time()
+                    recon, latent, g = self.model(x)
+#                     print('fw val time: ',time.time()-fw_val_tic)
+                    loss, loss_dict = self.objective(x_orig= x, x_recon= recon, g_posterior = g, model= self.model)
                     loss_dict_list.append(loss_dict)
                     
             valid_data = x.clone()
@@ -150,14 +164,15 @@ class RunManager():
                     self.health_check(self.model)
                     
             toc = time.time()
+#             print('backward time: ',bw_toc - bw_tic,' forward time: ',fw_toc - fw_tic, ' optim time: ',opt_toc - opt_tic, ' forward val time: ',fw_val_toc-fw_val_tic)
             
             results_string = 'Epoch %5d, Epoch time = %.3f s, Loss (train, valid): '%(self.epoch, toc - tic)
             for key in self.loss_dict['train'].keys():
                 train_loss = self.loss_dict['train'][key][self.epoch-1]
                 valid_loss = self.loss_dict['valid'][key][self.epoch-1]
-                results_string+= ' %s (%.2f, %.2f),'%(key, train_loss, valid_loss)
+                results_string+= ' %s (%.3f, %.3f),'%(key, train_loss, valid_loss)
             
-            results_string+= ' %s (%.2f)'%('l2', self.loss_dict['l2'][self.epoch-1])
+            results_string+= ' %s (%.3f)'%('l2', self.loss_dict['l2'][self.epoch-1])
             
             print(results_string, flush=True)
             
@@ -242,7 +257,7 @@ class RunManager():
         if not os.path.isdir(self.save_loc+'checkpoints/'):
             os.mkdir(self.save_loc+'checkpoints/')
         
-        torch.save({'net' : self.model.state_dict(), 'opt' : self.optimizer.state_dict(),
+        torch.save({'net' : self.model.module.state_dict(), 'opt' : self.optimizer.state_dict(),
                     'sched': self.scheduler.state_dict(), 'run_manager' : train_dict},
                      self.save_loc+'checkpoints/' + output_filename + '.pth')
         

@@ -134,10 +134,11 @@ class Conv_LFADS_Loss(LFADS_Loss):
     def forward(self, x_orig, x_recon, model):
         kl_weight = self.loss_weights['kl']['weight']
         l2_weight = self.loss_weights['l2']['weight']
+
         recon_loss = -self.loglikelihood(x_orig, x_recon['data'])
         
         kl_loss = model.lfads.kl_div()
-    
+        
         l2_loss = 0.5 * l2_weight * self.l2_gen_scale * model.lfads.generator.gru_generator.hidden_weight_l2_norm()
     
         if hasattr(model.lfads, 'controller'):            
@@ -205,7 +206,7 @@ class LogLikelihoodGaussian(nn.Module):
         if logvar is not None:
             return loglikelihood_gaussian(x, mean, logvar)
         else:
-            return torch.nn.functional.mse_loss(x, mean, reduction='sum')/x.shape[0]
+            -return torch.nn.functional.mse_loss(x, mean, reduction='sum')/x.shape[0]
     
 def loglikelihood_gaussian(x, mean, logvar):
     from math import pi

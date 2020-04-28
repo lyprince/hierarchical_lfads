@@ -37,7 +37,7 @@ def write_data(data_fname, data_dict, use_json=False, compression=None):
                             print('Saving variable with name: ', clean_k)
                     else:
                         clean_k = k
-                    
+
                     hf.create_dataset(clean_k, data=v, compression=compression)
         except IOError:
             print("Cannot open %s for writing.", data_fname)

@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from lfads import LFADS_Net
-
+import time
 import pdb
 
 class Conv3d_LFADS_Net(nn.Module):
@@ -46,7 +46,7 @@ class Conv3d_LFADS_Net(nn.Module):
             layer_dims = getattr(self.conv_layers, '{}{}'.format('block', n)).get_output_dims()
         
         self.deconv_layers = nn.ModuleList()
-        for n in reversed(range(0, len(self.channel_dims))):
+        for n in reversed(range(1, len(self.channel_dims))):
             self.deconv_layers.add_module('{}{}'.format('block', n),
                                           ConvTranspose3d_Block_1step(in_f = self.channel_dims[n],
                                                                       out_f= self.channel_dims[n-1]))
@@ -61,6 +61,10 @@ class Conv3d_LFADS_Net(nn.Module):
         self.conv_dense_2 = nn.Linear(in_features= self.factor_size,
                                       out_features = self.conv_output_size)
         
+        
+#         self.lfads_param = dict()
+        print(self.device)
+        print(torch.cuda.device_count())
         self.lfads = LFADS_Net(input_size= self.conv_dense_size,
                                g_encoder_size=self.g_encoder_size,
                                c_encoder_size=self.c_encoder_size,
@@ -77,7 +81,20 @@ class Conv3d_LFADS_Net(nn.Module):
                                factor_bias=self.factor_bias,
                                device= self.device)
         
+        self.register_buffer('g_posterior_mean',None)
+        self.register_buffer('g_posterior_logvar',None)
+        self.register_buffer('g_prior_mean',self.lfads.g_prior_mean)
+        self.register_buffer('g_prior_logvar',self.lfads.g_prior_logvar)
+        
+#         self.lfads_param['g_posterior_mean'] = self.lfads.g_posterior_mean
+#         self.lfads_param['g_posterior_logvar'] = self.lfads.g_posterior_logvar
+#         self.lfads_param['g_prior_mean'] = self.lfads.g_prior_mean
+#         self.lfads_param['g_prior_logvar'] = self.lfads.g_prior_logvar
+        
+        
+        
     def forward(self, x):
+        
         frame_per_block = 10
         batch_size, num_ch, seq_len, w, h = x.shape
         num_blocks = int(seq_len/frame_per_block)
@@ -88,10 +105,12 @@ class Conv3d_LFADS_Net(nn.Module):
         
 
         Ind = list()
+        conv_tic = time.time()
         for n, layer in enumerate(self.conv_layers):
             x, ind1 = layer(x)
             Ind.append(ind1)
-        
+        conv_toc = time.time()
+
         num_out_ch = x.shape[1]
         w_out = x.shape[3]
         h_out = x.shape[4]
@@ -106,7 +125,10 @@ class Conv3d_LFADS_Net(nn.Module):
         x = self.conv_dense_1(x.view(batch_size, seq_len, w_out * h_out * num_out_ch))
         
         x = x.permute(1, 0, 2)
+        lfads_tic = time.time()
         factors, gen_inputs = self.lfads(x)
+        lfads_toc = time.time()
+        # print('conv t: ',conv_toc - conv_tic,' lfads t: ',lfads_toc - lfads_tic)
         x = factors
         x = x.permute(1, 0, 2)
         x = self.conv_dense_2(x)
@@ -130,8 +152,13 @@ class Conv3d_LFADS_Net(nn.Module):
         x = x.permute(0, 2, 1, 3, 4, 5)
         x = x.view(batch_size, 1, seq_len, w, h)
         
+        g_posterior = dict()
+        g_posterior['mean'] = self.lfads.g_posterior_mean
+        g_posterior['logvar'] = self.lfads.g_posterior_logvar
+        
         recon = {'data' : x}
-        return recon, (factors, gen_inputs)
+
+        return recon, (factors, gen_inputs), g_posterior
     
     def normalize_factors(self):
         self.lfads.normalize_factors()
@@ -222,13 +249,13 @@ class Conv3d_Block_1step(_ConvNd_Block):
                                            kernel_size= kernel_size, 
                                            padding= padding,
                                            dilation = dilation,
-                                           stride= stride))        
+                                           stride= stride))
+        self.add_module('relu1', nn.ReLU())
         self.add_module('pool1', nn.MaxPool3d(kernel_size= pool_size,
                                               stride= pool_size,
                                               padding=(0, 0, 0),
                                               dilation=(1, 1, 1),
                                               return_indices= True))
-        self.add_module('relu1', nn.ReLU())
     
 class _ConvTransposeNd_Block(nn.ModuleList):
     def __init__(self):
