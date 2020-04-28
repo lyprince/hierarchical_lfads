@@ -93,11 +93,13 @@ class EmbeddedLowDNetwork(DynamicalSystem):
         
 class ChaoticNetwork(DynamicalSystem):
     
-    def __init__(self, num_inits=100, max_rate = 50.0, net_size=64, weight_scale=5.0, dt= 0.01, inputs=None):
+    def __init__(self, num_inits=100, base_rate = 1.0, net_size=64, weight_scale=5.0, dt= 0.01, inputs=None):
         self.dt = dt
-        self.max_rate = max_rate
+        self.base_rate = base_rate
         self.num_inits = num_inits
         self.net_size = net_size
+        self.bias = np.log(base_rate)
+        self.proj = (np.random.rand(self.net_size, self.net_size) + 1) * np.sign(np.random.randn(self.net_size, net_size)) / np.sqrt(self.net_size)
         
         self.state = np.random.randn(self.num_inits, self.net_size)
         self.weights = weight_scale * np.random.randn(self.net_size, self.net_size)/np.sqrt(self.net_size)
@@ -114,7 +116,7 @@ class ChaoticNetwork(DynamicalSystem):
             return None
         
     def rescale(self, xt):
-        return 0.5 * self.max_rate * (np.tanh(xt) + 1)
+        return np.exp(np.tanh(xt).dot(self.proj) + self.bias)
     
 class RandomPerturbation():
     def __init__(self, t_span=[0.25, 0.75], scale = 20):
