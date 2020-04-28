@@ -44,6 +44,7 @@ def main():
     else:
         data = data.transpose(0, 2, 1)
         data = data.reshape(data_size * state_size, steps_size)
+        data = np.hstack((np.zeros((data_size * state_size, 1)), data))
 
     if args.known:
         S, C = deconvolve_calcium_known(data, 
@@ -63,9 +64,9 @@ def main():
         C = C.reshape(data_size, steps_size, state_size)
         
     else:
-        data = data.reshape(data_size, state_size, steps_size).transpose(0, 2, 1)
-        S = S.reshape(data_size, state_size, steps_size).transpose(0, 2, 1)
-        C = C.reshape(data_size, state_size, steps_size).transpose(0, 2, 1)
+        data = data.reshape(data_size, state_size, steps_size+1).transpose(0, 2, 1)[:, 1:]
+        S = S.reshape(data_size, state_size, steps_size+1).transpose(0, 2, 1)[:, 1:]
+        C = C.reshape(data_size, state_size, steps_size+1).transpose(0, 2, 1)[:, 1:]
         
         if not args.known:
             bias = bias.reshape(data_size, state_size).mean(axis=0)

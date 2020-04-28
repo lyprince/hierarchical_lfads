@@ -36,6 +36,7 @@ def main():
     
     data_dict = read_data(args.data_path)
     
+    # Re-instantiate model
     train_dl, valid_dl, plotter, model, objective = prep_model(model_name  = model_name,
                                                                data_dict   = data_dict,
                                                                data_suffix = args.data_suffix,
@@ -43,10 +44,13 @@ def main():
                                                                device = device,
                                                                hyperparams = hyperparams)
     
+    # Load parameters
     state_dict = torch.load(args.model_dir + 'checkpoints/best.pth')
+    
     model.load_state_dict(state_dict['net'])
     model.eval()
     
+    # Dictionary for storing inferred states
     latent_dict = {'train' : {}, 'valid' : {}}
     latent_dict['train']['latent'] = []
     latent_dict['valid']['latent'] = []
@@ -91,8 +95,7 @@ def main():
         truth_dict[key] = {}
         for var in ['rates', 'spikes', 'latent', 'fluor']:
             data_dict_key = key + '_' + var
-#             print(data_dict_key)
-#             print(data_dict.keys())
+            
             if data_dict_key in data_dict.keys():
                 truth_dict[key][var] = data_dict[data_dict_key]
                 if var == 'latent':
@@ -101,13 +104,6 @@ def main():
                                                    np.concatenate(truth_dict[key][var]))
                     latent_dict[key]['latent_aligned'] = L_train.predict(np.concatenate(latent_dict[key][var]))
                     truth_dict[key]['latent_aligned'] = np.concatenate(truth_dict[key]['latent'])
-                
-
-                
-#             if var == 'fluor':
-#                 if model_name == 'svlae' or args.data_suffix == :
-#                     data_dict_key = key + '_data'
-#                     truth_dict[key][var] = data_dict[data_dict_key]
     
     results_dict = {}
     for key in ['train', 'valid']:

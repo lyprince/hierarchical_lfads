@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from objective import kldiv_gaussian_gaussian
 from rnn import LFADS_GenGRUCell
 from math import log
 import pdb
@@ -195,12 +196,7 @@ class LFADS_Net(nn.Module):
             self.u_prior_mean, self.u_prior_logvar = self._gp_to_normal(self.u_prior_gp_mean, self.u_prior_gp_logvar, self.u_prior_gp_logtau, gen_inputs)
         
         return (factors, gen_inputs)
-        # Create reconstruction dictionary
-#         recon = {'rates' : self.fc_logrates(factors).exp()}
-#         recon['data'] = recon['rates'].clone()
-#         return recon, (factors, gen_inputs)
     
-        
     def sample_gaussian(self, mean, logvar):
         '''
         sample_gaussian(mean, logvar)
@@ -274,6 +270,18 @@ class LFADS_Net(nn.Module):
         
     def change_parameter_grad_status(self, step, optimizer, scheduler, loading_checkpoint=False):
         return optimizer, scheduler
+    
+    def kl_div(self):
+        kl = kldiv_gaussian_gaussian(post_mu  = self.g_posterior_mean,
+                                     post_lv  = self.g_posterior_logvar,
+                                     prior_mu = self.g_prior_mean,
+                                     prior_lv = self.g_prior_logvar)
+        if self.u_latent_size > 0:
+            kl += kldiv_gaussian_gaussian(post_mu  = self.u_posterior_mean,
+                                          post_lv  = self.u_posterior_logvar,
+                                          prior_mu = self.u_prior_mean,
+                                          prior_lv = self.u_prior_logvar)
+        return kl
     
 class LFADS_SingleSession_Net(LFADS_Net):
     

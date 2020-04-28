@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from lfads import LFADS_Net, LFADS_Encoder, LFADS_ControllerCell
+from objective import kldiv_gaussian_gaussian
 from numpy import log
 import pdb
 
@@ -305,6 +306,12 @@ class Calcium_Net(nn.Module):
     def forward():
         pass
         
+    def kl_div(self):
+        kl = kldiv_gaussian_gaussian(post_mu  = self.u_posterior_mean,
+                                     post_lv  = self.u_posterior_logvar,
+                                     prior_mu = self.u_prior_mean,
+                                     prior_lv = self.u_prior_logvar)
+        return kl
     #------------------------------------------------------------------------------
     #------------------------------------------------------------------------------
     

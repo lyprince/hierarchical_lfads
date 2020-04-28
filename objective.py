@@ -70,24 +70,12 @@ class SVLAE_Loss(Base_Loss):
         recon_deep_loss = -self.loglikelihood_deep(x_recon['spikes'].permute(1, 0, 2), x_recon['rates'].permute(1, 0, 2))
         recon_deep_loss = recon_deep_weight * recon_deep_loss
 
-        kl_obs_loss = kl_obs_weight * kldiv_gaussian_gaussian(post_mu   = model.obs_model.u_posterior_mean,
-                                                               post_lv  = model.obs_model.u_posterior_logvar,
-                                                               prior_mu = model.obs_model.u_prior_mean,
-                                                               prior_lv = model.obs_model.u_prior_logvar)
-
-        kl_deep_loss = kl_deep_weight * kldiv_gaussian_gaussian(post_mu  = model.deep_model.g_posterior_mean,
-                                                                post_lv  = model.deep_model.g_posterior_logvar,
-                                                                prior_mu = model.deep_model.g_prior_mean,
-                                                                prior_lv = model.deep_model.g_prior_logvar)
+        kl_obs_loss = kl_obs_weight * model.obs_model.kl_div()
+        kl_deep_loss = kl_deep_weight * model.deep_model.kl_div()
 
         l2_loss = 0.5 * l2_weight * self.l2_gen_scale * model.deep_model.generator.gru_generator.hidden_weight_l2_norm()
 
         if hasattr(model.deep_model, 'controller'):
-            kl_deep_loss += kl_deep_weight * kldiv_gaussian_gaussian(post_mu  = model.deep_model.u_posterior_mean,
-                                                                     post_lv  = model.deep_model.u_posterior_logvar,
-                                                                     prior_mu = model.deep_model.u_prior_mean,
-                                                                     prior_lv = model.deep_model.u_prior_logvar)
-
             l2_loss += 0.5 * l2_weight * self.l2_con_scale * model.deep_model.controller.gru_controller.hidden_weight_l2_norm()
             
         loss = recon_obs_loss + recon_deep_loss +  kl_obs_loss + kl_deep_loss + l2_loss
@@ -115,19 +103,11 @@ class LFADS_Loss(Base_Loss):
         
         recon_loss = -self.loglikelihood(x_orig, x_recon['data'])
 
-        kl_loss = kl_weight * kldiv_gaussian_gaussian(post_mu  = model.g_posterior_mean,
-                                                      post_lv  = model.g_posterior_logvar,
-                                                      prior_mu = model.g_prior_mean,
-                                                      prior_lv = model.g_prior_logvar)
+        kl_loss = kl_weight * model.kl_div()
     
         l2_loss = 0.5 * l2_weight * self.l2_gen_scale * model.generator.gru_generator.hidden_weight_l2_norm()
     
         if hasattr(model, 'controller'):
-            kl_loss += kl_weight * kldiv_gaussian_gaussian(post_mu  = model.u_posterior_mean,
-                                                           post_lv  = model.u_posterior_logvar,
-                                                           prior_mu = model.u_prior_mean,
-                                                           prior_lv = model.u_prior_logvar)
-            
             l2_loss += 0.5 * l2_weight * self.l2_con_scale * model.controller.gru_controller.hidden_weight_l2_norm()
             
         loss = recon_loss +  kl_loss + l2_loss
@@ -155,20 +135,12 @@ class Conv_LFADS_Loss(LFADS_Loss):
         kl_weight = self.loss_weights['kl']['weight']
         l2_weight = self.loss_weights['l2']['weight']
         recon_loss = -self.loglikelihood(x_orig, x_recon['data'])
-
-        kl_loss = kl_weight * kldiv_gaussian_gaussian(post_mu  = model.lfads.g_posterior_mean.to(torch.float32),
-                                                      post_lv  = model.lfads.g_posterior_logvar.to(torch.float32),
-                                                      prior_mu = model.lfads.g_prior_mean.to(torch.float32),
-                                                      prior_lv = model.lfads.g_prior_logvar.to(torch.float32)).to(dtype=x_orig.dtype)
+        
+        kl_loss = model.lfads.kl_div()
     
         l2_loss = 0.5 * l2_weight * self.l2_gen_scale * model.lfads.generator.gru_generator.hidden_weight_l2_norm()
     
-        if hasattr(model, 'controller'):
-            kl_loss += kl_weight * kldiv_gaussian_gaussian(post_mu  = model.lfads.u_posterior_mean.to(torch.float32),
-                                                           post_lv  = model.lfads.u_posterior_logvar.to(torch.float32),
-                                                           prior_mu = model.lfads.u_prior_mean.to(torch.float32),
-                                                           prior_lv = model.lfads.u_prior_logvar.to(torch.float32)).to(dtype=x_orig.dtype7)
-            
+        if hasattr(model.lfads, 'controller'):            
             l2_loss += 0.5 * l2_weight * self.l2_con_scale * model.lfads.controller.gru_controller.hidden_weight_l2_norm()
             
         loss = recon_loss +  kl_loss + l2_loss
