@@ -6,6 +6,7 @@ import os
 import pdb
 import functools, collections, operator
 
+from conv_lfads import Conv3d_LFADS_Net
 
 class RunManager():
     def __init__(self, model, objective, optimizer, scheduler,
@@ -57,13 +58,21 @@ class RunManager():
                 
                 self.optimizer.zero_grad()
                 fw_tic = time.time()
+                #if isinstance(self.model,Conv3d_LFADS_Net):
                 recon, latent, g = self.model(x)
+                loss, loss_dict = self.objective(x_orig= x,
+                                                x_recon= recon,
+                                                g_posterior = g,
+                                                model= self.model)
+                #else:
+                    #recon, latent = self.model(x)
+                    #loss, loss_dict = self.objective(x_orig= x,
+                    #                             x_recon= recon,
+                    #                             model= self.model)
+                    
 #                 print('fw time: ', time.time()-fw_tic)
                 loss_tic = time.time()
-                loss, loss_dict = self.objective(x_orig= x,
-                                                 x_recon= recon,
-                                                 g_posterior = g,
-                                                 model= self.model)                
+                                
 #                 print('loss time: ', time.time()-loss_tic)
                 loss_dict_list.append(loss_dict)
                 
@@ -122,9 +131,16 @@ class RunManager():
                 with torch.no_grad():
                     x = x[0]
                     fw_val_tic = time.time()
+                    #if isinstance(self.model,Conv3d_LFADS_Net):
                     recon, latent, g = self.model(x)
 #                     print('fw val time: ',time.time()-fw_val_tic)
                     loss, loss_dict = self.objective(x_orig= x, x_recon= recon, g_posterior = g, model= self.model)
+                    #else:
+                    #    recon, latent = self.model(x)
+#                     print('fw val time: ',time.time()-fw_val_tic)
+                    #    loss, loss_dict = self.objective(x_orig= x, x_recon= recon, model= self.model)
+                        
+            
                     loss_dict_list.append(loss_dict)
                     
             valid_data = x.clone()
@@ -257,9 +273,14 @@ class RunManager():
         if not os.path.isdir(self.save_loc+'checkpoints/'):
             os.mkdir(self.save_loc+'checkpoints/')
         
-        torch.save({'net' : self.model.module.state_dict(), 'opt' : self.optimizer.state_dict(),
-                    'sched': self.scheduler.state_dict(), 'run_manager' : train_dict},
-                     self.save_loc+'checkpoints/' + output_filename + '.pth')
+        if torch.cuda.device_count() > 1:
+            torch.save({'net' : self.model.module.state_dict(), 'opt' : self.optimizer.state_dict(),
+                        'sched': self.scheduler.state_dict(), 'run_manager' : train_dict},
+                         self.save_loc+'checkpoints/' + output_filename + '.pth')
+        else:
+            torch.save({'net' : self.model.state_dict(), 'opt' : self.optimizer.state_dict(),
+                        'sched': self.scheduler.state_dict(), 'run_manager' : train_dict},
+                         self.save_loc+'checkpoints/' + output_filename + '.pth')
         
     #------------------------------------------------------------------------------
     #------------------------------------------------------------------------------

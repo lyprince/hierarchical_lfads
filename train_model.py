@@ -22,6 +22,7 @@ import pdb
 
 torch.backends.cudnn.benchmark = True
 torch.backends.cudnn.enabled = True
+#torch.backends.cudnn.deterministic = True
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-m', '--model', type=str)
@@ -82,6 +83,11 @@ def main():
                                                                hyperparams = hyperparams)
         
     print_model_description(model)
+    
+    if args.model == 'conv3d_lfads':
+        model = _CustomDataParallel(model).to(device)
+        
+        
         
     transforms = trf.Compose([])
     
@@ -113,9 +119,9 @@ def main():
     
     if args.model == 'conv3d_lfads':
         model_to_plot = load_model(save_loc, hyperparams, model_name = args.model, input_dims = run_manager.model.input_dims)
-        save_figs(save_loc, model_to_plot, run_manager.valid_dl, plotter)
+        save_figs(save_loc, model_to_plot, run_manager.valid_dl, plotter, mode='video')
     else:
-        save_figs(save_loc, run_manager.model, run_manager.valid_dl, plotter)
+        save_figs(save_loc, run_manager.model, run_manager.valid_dl, plotter, mode='traces')
     
 
 #-------------------------------------------------------------------
@@ -169,7 +175,7 @@ def prep_model(model_name, data_dict, data_suffix, batch_size, device, hyperpara
 #-------------------------------------------------------------------
         
 def prep_lfads(input_dims, hyperparams, device, dtype, dt):
-    from objective import LFADS_Loss, LogLikelihoodPoisson
+    from objective import LFADS_Loss, LogLikelihoodPoisson, LogLikelihoodGaussian
     from lfads import LFADS_SingleSession_Net
 
     model = LFADS_SingleSession_Net(input_size           = input_dims,
@@ -187,7 +193,7 @@ def prep_lfads(input_dims, hyperparams, device, dtype, dt):
                                     max_norm             = hyperparams['model']['max_norm'],
                                     device               = device).to(device)
     
-    loglikelihood = LogLikelihoodPoisson(dt=float(dt))
+    loglikelihood = LogLikelihoodGaussian()#LogLikelihoodPoisson(dt=float(dt))# #
 
     objective = LFADS_Loss(loglikelihood            = loglikelihood,
                            loss_weight_dict         = {'kl': hyperparams['objective']['kl'], 
@@ -207,6 +213,7 @@ def prep_conv3d_lfads(input_dims, hyperparams, device, dtype):
     from conv_lfads import Conv3d_LFADS_Net
     
     model = Conv3d_LFADS_Net(input_dims      = input_dims,#(num_steps, width, height),
+                             conv_dense_size = hyperparams['model']['conv_dense_size'],
                              channel_dims    = hyperparams['model']['channel_dims'],
                              factor_size     = hyperparams['model']['factor_size'],
                              g_encoder_size  = hyperparams['model']['g_encoder_size'],
@@ -221,9 +228,9 @@ def prep_conv3d_lfads(input_dims, hyperparams, device, dtype):
                              lfads_dropout   = hyperparams['model']['lfads_dropout'],
                              do_normalize_factors = hyperparams['model']['normalize_factors'],
                              max_norm        = hyperparams['model']['max_norm'],
-                             device          = device)
+                             device          = device).to(device)
     
-    model = _CustomDataParallel(model).to(device)
+#     model = _CustomDataParallel(model).to(device)
     
     model.to(dtype=dtype)
     torch.set_default_dtype(dtype)
@@ -479,7 +486,7 @@ def generate_save_loc(args, hyperparams, orion_hp_string):
 #-------------------------------------------------------------------
 #-------------------------------------------------------------------
     
-def save_figs(save_loc, model, dl, plotter):
+def save_figs(save_loc, model, dl, plotter, mode):
         
     fig_folder = save_loc + 'figs/'
     
@@ -490,13 +497,15 @@ def save_figs(save_loc, model, dl, plotter):
     from matplotlib.figure import Figure
     import matplotlib
     matplotlib.use('Agg')
-    fig_dict = plotter['valid'].plot_summary(model= model_to_plot, dl= dl)
+    fig_dict = plotter['valid'].plot_summary(model= model,mode=mode, num_average=4, save_dir = fig_folder, dl= dl)
     for k, v in fig_dict.items():
         if type(v) == Figure:
             v.savefig(fig_folder+k+'.svg')
 
             
 def load_model(save_loc, hyperparams, model_name, input_dims):
+
+    from conv_lfads import Conv3d_LFADS_Net    
     
     if model_name == 'conv3d_lfads':
 

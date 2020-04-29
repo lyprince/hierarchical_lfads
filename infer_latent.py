@@ -14,6 +14,7 @@ matplotlib.use('Agg')
 
 from utils import write_data, read_data, load_parameters, batchify_sample
 from train_model import prep_model
+from conv_lfads import Conv3d_LFADS_Net
 import pdb
 
 parser = argparse.ArgumentParser()
@@ -42,7 +43,7 @@ def main():
                                                                batch_size  = args.num_average,
                                                                device = device,
                                                                hyperparams = hyperparams)
-    
+    print(type(model))
     state_dict = torch.load(args.model_dir + 'checkpoints/best.pth')
     model.load_state_dict(state_dict['net'])
     model.eval()
@@ -60,7 +61,8 @@ def main():
         
         for dl, key in ((train_dl, 'train'), (valid_dl, 'valid')):
             latent_dict[key]['latent'] = []
-            latent_dict[key]['rates'] = []
+            if model_name != 'conv3d_lfads':
+                latent_dict[key]['rates'] = []
             if model_name == 'svlae':
                 latent_dict[key]['spikes'] = []
                 latent_dict[key]['fluor'] = []
@@ -68,7 +70,8 @@ def main():
                 x = x[0]
                 result = infer_and_recon(x, batch_size=args.num_average, model=model)
                 latent_dict[key]['latent'].append(result['latent'])
-                latent_dict[key]['rates'].append(result['rates'])
+                if model_name != 'conv3d_lfads':
+                    latent_dict[key]['rates'].append(result['rates'])
                 if model_name == 'svlae':
                     latent_dict[key]['spikes'].append(result['spikes'])
                     latent_dict[key]['fluor'].append(result['fluor'])
@@ -97,8 +100,8 @@ def main():
                 truth_dict[key][var] = data_dict[data_dict_key]
                 if var == 'latent':
                     if data_dict_key == 'train_latent':
-                        L_train = fit_linear_model(np.concatenate(latent_dict[key][var]),
-                                                   np.concatenate(truth_dict[key][var]))
+                        L_train = fit_linear_model(np.concatenate(latent_dict[key][var][:, 10:]),
+                                                   np.concatenate(truth_dict[key][var][:, 10:]))
                     latent_dict[key]['latent_aligned'] = L_train.predict(np.concatenate(latent_dict[key][var]))
                     truth_dict[key]['latent_aligned'] = np.concatenate(truth_dict[key]['latent'])
                 
@@ -180,10 +183,15 @@ def main():
     
 def infer_and_recon(sample, batch_size, model):
     batch = batchify_sample(sample, batch_size)
-    recon, (factors, inputs) = model(batch)
+    if isinstance(model,Conv3d_LFADS_Net):
+        recon, (factors, inputs), _ = model(batch)
+    else:
+        recon, (factors, inputs) = model(batch)
+        
     result = {}
     result['latent'] = factors.mean(dim=1).cpu().numpy()
-    result['rates'] = recon['rates'].mean(dim=1).cpu().numpy()
+    if 'rates' in recon.keys():
+        result['rates'] = recon['rates'].mean(dim=1).cpu().numpy()
     if inputs is not None:
         result['inputs'] = inputs.mean(dim=1).cpu().numpy()
     if 'spikes' in recon.keys():

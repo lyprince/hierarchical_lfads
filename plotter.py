@@ -6,6 +6,8 @@ import os
 
 from utils import batchify_random_sample
 
+from conv_lfads import Conv3d_LFADS_Net
+
 class Plotter(object):
     def __init__(self, time, truth=None, base_fontsize=14):
         self.dt = np.diff(time)[0]
@@ -50,7 +52,10 @@ class Plotter(object):
         
         model.eval()
         with torch.no_grad():
-            recon, (factors, inputs), g_posterior = model(batch_example)
+            if isinstance(model,Conv3d_LFADS_Net):
+                recon, (factors, inputs), g_posterior = model(batch_example)
+            else:
+                recon, (factors, inputs) = model(batch_example)
         
         orig = batch_example[0].cpu().numpy()
 #         print(batch_example.shape, data.shape, recon['data'].shape)
@@ -138,12 +143,15 @@ class Plotter(object):
         
         for ii, (ax,idx) in enumerate(zip(axs,idxs)):
             if norm is True:
-                true_norm= (true[:, idx] - np.mean(true[:, idx]))/np.std(true[:, idx])
-                pred_norm= (pred[:, idx] - np.mean(pred[:, idx]))/np.std(pred[:, idx])
+#                 true_norm= (true[:, idx] - np.mean(true[:, idx]))/np.std(true[:, idx])
+#                 pred_norm= (pred[:, idx] - np.mean(pred[:, idx]))/np.std(pred[:, idx])
                 
+#                 plt.sca(ax)
+#                 plt.plot(self.time, true_norm, lw=2, color=self.colors['linc_red'])
+#                 plt.plot(self.time, pred_norm, lw=2, color=self.colors['linc_blue'])
                 plt.sca(ax)
-                plt.plot(self.time, true_norm, lw=2, color=self.colors['linc_red'])
-                plt.plot(self.time, pred_norm, lw=2, color=self.colors['linc_blue'])
+                plt.plot(self.time, true[:, idx], lw=2, color=self.colors['linc_red'])
+                plt.plot(self.time, pred[:, idx], lw=2, color=self.colors['linc_blue'])
             
             else:
                 plt.sca(ax)

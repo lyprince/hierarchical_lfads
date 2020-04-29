@@ -113,7 +113,8 @@ class LFADS_Loss(Base_Loss):
         kl_weight = self.loss_weights['kl']['weight']
         l2_weight = self.loss_weights['l2']['weight']
         
-        recon_loss = -self.loglikelihood(x_orig, x_recon['data'])
+#         recon_loss = -self.loglikelihood(x_orig, x_recon['data'])
+        recon_loss = self.loglikelihood(x_orig, x_recon['data'])
 
         kl_loss = kl_weight * kldiv_gaussian_gaussian(post_mu  = model.g_posterior_mean,
                                                       post_lv  = model.g_posterior_logvar,
