@@ -102,7 +102,7 @@ class Plotter(object):
     #------------------------------------------------------------------------------W
     #------------------------------------------------------------------------------
     
-    def plot_traces(self, pred, true, figsize=(8,8), num_traces=12, ncols=2, mode=None, norm=True, pred_logvar=None):
+    def plot_traces(self, pred, true, figsize=(8,8), num_traces=12, ncols=2, mode=None, norm=False, pred_logvar=None):
         '''
         Plot trace and compare to ground truth
         

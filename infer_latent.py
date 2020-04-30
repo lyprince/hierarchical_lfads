@@ -28,7 +28,7 @@ def main():
     
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     
-    model_name = args.model_dir.split('/')[-3]
+    model_name = args.model_dir.split('/')[-3].split('_')[0]
     data_name = args.model_dir.split('/')[-4]
     
     hp_path = args.model_dir + 'hyperparameters.yaml'
