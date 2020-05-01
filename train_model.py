@@ -193,7 +193,7 @@ def prep_lfads(input_dims, hyperparams, device, dtype, dt):
                                     max_norm             = hyperparams['model']['max_norm'],
                                     device               = device).to(device)
     
-    loglikelihood = LogLikelihoodGaussian()#LogLikelihoodPoisson(dt=float(dt))# #
+    loglikelihood = LogLikelihoodPoisson(dt=float(dt))# #
 
     objective = LFADS_Loss(loglikelihood            = loglikelihood,
                            loss_weight_dict         = {'kl': hyperparams['objective']['kl'], 
