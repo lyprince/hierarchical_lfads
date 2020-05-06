@@ -81,9 +81,9 @@ class Conv3d_LFADS_Net(nn.Module):
                                factor_bias=self.factor_bias,
                                device= self.device)
         
-        self.register_buffer('g_posterior_mean',None)
-        self.register_buffer('g_posterior_logvar',None)
-        self.register_buffer('g_prior_mean',self.lfads.g_prior_mean)
+        self.register_parameter('g_posterior_mean',None)
+        self.register_parameter('g_posterior_logvar',None)
+        self.register_parameter('g_prior_mean',self.lfads.g_prior_mean)
         self.register_buffer('g_prior_logvar',self.lfads.g_prior_logvar)
         
 #         self.lfads_param['g_posterior_mean'] = self.lfads.g_posterior_mean
