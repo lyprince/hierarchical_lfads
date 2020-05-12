@@ -107,7 +107,9 @@ def main():
     arg_string =  '_o%s'%('k' if args.known else 'u')
     arg_string += '_t%s'%(str(args.tau))
     arg_string += '_s%s'%(str(args.scale))
-    arg_string.replace('.', '-')
+    arg_string += '_f' if args.flatten else ''
+    arg_string += '_z' if args.undo_train_test_split else ''
+    arg_string += '_n' if args.normalize else ''
     
     write_data(os.path.join(dir_name, data_name) + arg_string, data_dict)
 
