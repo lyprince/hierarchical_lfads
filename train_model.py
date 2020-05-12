@@ -7,6 +7,7 @@ import torch
 import torchvision
 import torch.optim as opt
 import torchvision.transforms as trf
+import pickle
 
 from orion.client import report_results
 
@@ -94,11 +95,13 @@ def main():
                              max_epochs = args.max_epochs,
                              save_loc   = save_loc,
                              do_health_check = args.do_health_check,
-                             detect_local_minima = args.detect_local_minima)
+                             detect_local_minima = args.detect_local_minima,
+                             load_checkpoint=(not args.restart))
 
     run_manager.run()
         
     save_figs(save_loc, run_manager.model, run_manager.valid_dl, plotter)
+    pickle.dump(run_manager.loss_dict, open(save_loc+'/loss.pkl', 'wb'))
 
 #-------------------------------------------------------------------
 #-------------------------------------------------------------------

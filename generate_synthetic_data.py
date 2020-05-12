@@ -4,6 +4,7 @@ from synthetic_data import SyntheticCalciumDataGenerator
 from utils import write_data
 import argparse
 import yaml
+import os
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-d', '--system', default='lorenz', type=str)
@@ -22,53 +23,58 @@ parser.add_argument('--burn_steps', default=0, type=int)
 
 def main():
     args = parser.parse_args()
-    if args.parameters:
-        params_dict = yaml.load(open(args.parameters), Loader=yaml.FullLoader)
-        for key, val in params_dict.items():
-            args.__setattr__(key, val)
-            print('%s : %s'%(key, str(args.__getattribute__(key))), flush=True)
     
-    if args.system == 'lorenz':
-        from synthetic_data import LorenzSystem, EmbeddedLowDNetwork
-        
-        lorenz = LorenzSystem(num_inits= args.inits,
-                              dt= args.dt_sys)
-        
-        net = EmbeddedLowDNetwork(low_d_system = lorenz,
-                                  net_size = args.cells,
-                                  base_rate = args.rate_scale,
-                                  dt = args.dt_sys)
-        
-    elif args.system == 'chaotic-rnn':
-        from synthetic_data import ChaoticNetwork, RandomPerturbation
-        
-        inputs = RandomPerturbation(t_span=[0.25, 0.75], scale=10)
-        
-        net = ChaoticNetwork(num_inits= args.inits,
-                             base_rate= args.rate_scale,
-                             net_size = args.cells,
-                             weight_scale = 2.5,
-                             dt=args.dt_sys,
-                             inputs= inputs)
-        
-    # generate data
-        
-    generator = SyntheticCalciumDataGenerator(system     = net,
-                                              seed       = args.seed,
-                                              trainp     = args.trainp,
-                                              burn_steps = args.burn_steps,
-                                              num_steps  = args.steps,
-                                              num_trials = args.trials,
-                                              tau_cal    = 0.3,
-                                              dt_cal     = args.dt_spike,
-                                              sigma      = 0.2)
-        
-    data_dict = generator.generate_dataset()
+    if os.path.exists('%s/%s_%03d'%(args.output, args.system, args.seed)):
+        pass
     
-    # save
-    
-    print('Saving to %s/%s_%03d'%(args.output, args.system, args.seed), flush=True)
-    write_data('%s/%s_%03d'%(args.output, args.system, args.seed), data_dict)
+    else:
+        if args.parameters:
+            params_dict = yaml.load(open(args.parameters), Loader=yaml.FullLoader)
+            for key, val in params_dict.items():
+                args.__setattr__(key, val)
+                print('%s : %s'%(key, str(args.__getattribute__(key))), flush=True)
+
+        if args.system == 'lorenz':
+            from synthetic_data import LorenzSystem, EmbeddedLowDNetwork
+
+            lorenz = LorenzSystem(num_inits= args.inits,
+                                  dt= args.dt_sys)
+
+            net = EmbeddedLowDNetwork(low_d_system = lorenz,
+                                      net_size = args.cells,
+                                      base_rate = args.rate_scale,
+                                      dt = args.dt_sys)
+
+        elif args.system == 'chaotic-rnn':
+            from synthetic_data import ChaoticNetwork, RandomPerturbation
+
+            inputs = RandomPerturbation(t_span=[0.25, 0.75], scale=10)
+
+            net = ChaoticNetwork(num_inits= args.inits,
+                                 base_rate= args.rate_scale,
+                                 net_size = args.cells,
+                                 weight_scale = 2.5,
+                                 dt=args.dt_sys,
+                                 inputs= inputs)
+
+        # generate data
+
+        generator = SyntheticCalciumDataGenerator(system     = net,
+                                                  seed       = args.seed,
+                                                  trainp     = args.trainp,
+                                                  burn_steps = args.burn_steps,
+                                                  num_steps  = args.steps,
+                                                  num_trials = args.trials,
+                                                  tau_cal    = 0.3,
+                                                  dt_cal     = args.dt_spike,
+                                                  sigma      = 0.2)
+
+        data_dict = generator.generate_dataset()
+
+        # save
+
+        print('Saving to %s/%s_%03d'%(args.output, args.system, args.seed), flush=True)
+        write_data('%s/%s_%03d'%(args.output, args.system, args.seed), data_dict)
     
 if __name__ == '__main__':
     main()

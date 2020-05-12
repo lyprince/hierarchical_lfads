@@ -206,10 +206,13 @@ class SVLAE_Net(nn.Module):
     def change_parameter_grad_status(self, step, optimizer, scheduler, loading_checkpoint=False):
         
         def step_condition(run_step, status_step, loading_checkpoint):
-            if loading_checkpoint:
-                return run_step >= status_step
+            if status_step is not None:
+                if loading_checkpoint:
+                    return run_step >= status_step
+                else:
+                    return run_step == status_step
             else:
-                return run_step == status_step
+                return False
         
         if step_condition(step, self.deep_unfreeze_step, loading_checkpoint):
             print('Unfreezing deep model parameters', flush=True)

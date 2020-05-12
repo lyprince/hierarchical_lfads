@@ -267,9 +267,7 @@ class RunManager():
             self.model.load_state_dict(state_dict['net'])
             print(state_dict['run_manager']['step'])
             if len(state_dict['opt']['param_groups']) > 1:
-                self.optimizer, self.scheduler = self.model.unfreeze_deep_parameters(state_dict['run_manager']['step'], self.optimizer, self.scheduler)
-                self.optimizer, self.scheduler = self.model.early_stop_obs_parameters(state_dict['run_manager']['step'], self.optimizer, self.scheduler)
-                self.optimizer, self.scheduler = self.model.continue_obs_parameters(state_dict['run_manager']['step'], self.optimizer, self.scheduler)
+                self.optimizer, self.scheduler = self.model.change_parameter_grad_status(state_dict['run_manager']['step'], self.optimizer, self.scheduler, loading_checkpoint=True)
 #                 pdb.set_trace()
             self.optimizer.load_state_dict(state_dict['opt'])
             self.scheduler.load_state_dict(state_dict['sched'])
