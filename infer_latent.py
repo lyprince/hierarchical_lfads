@@ -3,6 +3,7 @@
 import argparse
 import os
 import pickle
+import yaml
 
 import torch
 import numpy as np
@@ -106,11 +107,12 @@ def main():
                     truth_dict[key]['latent_aligned'] = np.concatenate(truth_dict[key]['latent'])
     
     results_dict = {}
+    figs_dict = {}
     for key in ['train', 'valid']:
-        results_dict[key] = compare_truth(latent_dict[key], truth_dict[key])
+        results_dict[key], figs_dict[key] = compare_truth(latent_dict[key], truth_dict[key])
 #         print(results_dict.keys())
 #         pdb.set_trace()
-        for var, sub_dict in results_dict[key].items():
+        for var, sub_dict in figs_dict[key].items():
             sub_dict['fig'].savefig(args.model_dir + 'figs/%s_%s_rsq.svg'%(key, var))
 #             print(type(sub_dict['fig']))
             print('saved figure at ' + args.model_dir + 'figs/%s_%s_rsq.svg'%(key, var))
@@ -172,7 +174,7 @@ def main():
             fig.savefig(args.model_dir + 'figs/%s_factors3d_rsq.svg'%(key))
         
     pickle.dump(latent_dict, file=open('%slatent.pkl'%args.model_dir, 'wb'))
-    pickle.dump(results_dict, file=open('%sresults.pkl'%args.model_dir, 'wb'))
+    yaml.dump(results_dict, open('%sresults.yaml'%args.model_dir, 'w'), default_flow_style=False)
     
 def infer_and_recon(sample, batch_size, model):
     batch = batchify_sample(sample, batch_size)
@@ -242,23 +244,25 @@ def plot_rsquared(x, y, figsize=(4,4), ms=1, title=''):
 
 def compare_truth(latent_dict, truth_dict):
     results_dict = {}
+    figs_dict = {}
     def compare(key, x_dict, y_dict, save=True):
         results_dict = {}
+        figs_dict = {}
         results_dict['rsq'] = compute_rsquared(x= x_dict[key].flatten(),
                                                y= y_dict[key].flatten())
-        results_dict['fig'] = plot_rsquared(x_dict[key].flatten(),
+        figs_dict['fig'] = plot_rsquared(x_dict[key].flatten(),
                                             y_dict[key].flatten(),
                                             title='rsq= %.3f'%results_dict['rsq'])
         
-        return results_dict
+        return results_dict, figs_dict
     
     for var in ['rates', 'spikes', 'fluor', 'latent_aligned']:
 #         print(latent_dict.keys())
 #         print(truth_dict.keys())
         if var in latent_dict.keys() and var in truth_dict.keys():
-            results_dict[var] = compare(var, latent_dict, truth_dict)
+            results_dict[var], figs_dict[var] = compare(var, latent_dict, truth_dict)
             
-    return results_dict
+    return results_dict, figs_dict
 
     
 if __name__ == '__main__':

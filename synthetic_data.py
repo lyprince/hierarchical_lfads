@@ -172,7 +172,7 @@ class SyntheticCalciumDataGenerator():
         self.calcium_dynamics = AR1Calcium(dims=(self.num_trials,
                                                  self.system.num_inits,
                                                  self.system.net_size), 
-                                           tau=tau_cal, dt=dt_cal)
+                                                 tau=tau_cal, dt=dt_cal)
         self.sigma = sigma
         
         self.frame_height = frame_height
