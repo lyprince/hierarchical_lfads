@@ -183,7 +183,6 @@ class SVLAE_Net(nn.Module):
         recon['rates'] = self.deep_model.fc_logrates(factors).exp()
         recon['data']  = obs.permute(1, 0, 2)
         recon['spikes'] = spikes
-        
         return recon, (factors, deep_gen_inputs)
     
 

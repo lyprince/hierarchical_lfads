@@ -307,6 +307,7 @@ class LFADS_SingleSession_Net(LFADS_Net):
         
     def forward(self, input):
         factors, gen_inputs = super(LFADS_SingleSession_Net, self).forward(input.permute(1, 0, 2))
+        
         recon = {'rates' : self.fc_logrates(factors).exp()}
         recon['data'] = recon['rates'].clone().permute(1, 0, 2)
         return recon, (factors, gen_inputs)

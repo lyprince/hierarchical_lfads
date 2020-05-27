@@ -58,17 +58,19 @@ class RunManager():
                 
                 self.optimizer.zero_grad()
                 fw_tic = time.time()
-                #if isinstance(self.model,Conv3d_LFADS_Net):
-                recon, latent, g = self.model(x)
-                loss, loss_dict = self.objective(x_orig= x,
-                                                x_recon= recon,
-                                                g_posterior = g,
-                                                model= self.model)
-                #else:
-                    #recon, latent = self.model(x)
-                    #loss, loss_dict = self.objective(x_orig= x,
-                    #                             x_recon= recon,
-                    #                             model= self.model)
+                if isinstance(self.model,Conv3d_LFADS_Net):
+                    
+                    recon, latent, g = self.model(x)
+                    loss, loss_dict = self.objective(x_orig= x,
+                                                     x_recon= recon,
+                                                     g_posterior = g,
+                                                     model= self.model)
+                else:
+                    
+                    recon, latent = self.model(x)
+                    loss, loss_dict = self.objective(x_orig= x,
+                                                     x_recon= recon,
+                                                     model= self.model)
                     
 #                 print('fw time: ', time.time()-fw_tic)
                 loss_tic = time.time()
@@ -131,14 +133,14 @@ class RunManager():
                 with torch.no_grad():
                     x = x[0]
                     fw_val_tic = time.time()
-                    #if isinstance(self.model,Conv3d_LFADS_Net):
-                    recon, latent, g = self.model(x)
+                    if isinstance(self.model,Conv3d_LFADS_Net):
+                        recon, latent, g = self.model(x)
 #                     print('fw val time: ',time.time()-fw_val_tic)
-                    loss, loss_dict = self.objective(x_orig= x, x_recon= recon, g_posterior = g, model= self.model)
-                    #else:
-                    #    recon, latent = self.model(x)
+                        loss, loss_dict = self.objective(x_orig= x, x_recon= recon, g_posterior = g, model= self.model)
+                    else:
+                        recon, latent = self.model(x)
 #                     print('fw val time: ',time.time()-fw_val_tic)
-                    #    loss, loss_dict = self.objective(x_orig= x, x_recon= recon, model= self.model)
+                        loss, loss_dict = self.objective(x_orig= x, x_recon= recon, model= self.model)
                         
             
                     loss_dict_list.append(loss_dict)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from synthetic_data import SyntheticCalciumDataGenerator
+from synthetic_data import SyntheticCalciumDataGenerator, ShenoyCalciumDataGenerator
 from utils import write_data
 import argparse
 import yaml

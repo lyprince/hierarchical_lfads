@@ -281,6 +281,7 @@ class ShenoyCalciumDataGenerator():
         
         num_samples = X.shape[2]
         bin_width = int(num_samples/num)
+        print(np.sum(X[0,0,:,1]))
         Xds = np.sum(X.reshape(self.num_trials,1,-1, bin_width,self.net_size),3)
         
         return Xds
@@ -307,12 +308,12 @@ class ShenoyCalciumDataGenerator():
 
 
         # myarray = np.ndarray((2296,202,90),buffer=data)
-        print(unitspikesCount.shape)
         unitspikesCount = unitspikesCount.transpose((2,0,1))
         self.num_trials = unitspikesCount.shape[0]
         num_steps_before_downsample = unitspikesCount.shape[1]
         self.net_size = unitspikesCount.shape[2]
-        self.num_steps = int(num_steps_before_downsample*(1/(1000*self.dt_cal)))
+        print(self.dt_cal)
+        self.num_steps = int(num_steps_before_downsample*(1/(1000*self.dt_cal)))#
         
         
         unitspikesCount = np.reshape(unitspikesCount,(self.num_trials,1,num_steps_before_downsample,self.net_size))
