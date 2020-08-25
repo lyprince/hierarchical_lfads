@@ -1,3 +1,5 @@
+import sys
+sys.path.append('../OASIS/')
 import numpy as np
 import oasis
 import pdb
