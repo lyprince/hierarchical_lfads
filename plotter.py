@@ -53,7 +53,7 @@ class Plotter(object):
         model.eval()
         with torch.no_grad():
             if isinstance(model,Conv3d_LFADS_Net):
-                recon, (factors, inputs), g_posterior = model(batch_example)
+                recon, (factors, inputs), g_posterior, cout = model(batch_example)
             else:
                 recon, (factors, inputs) = model(batch_example)
         
@@ -65,7 +65,7 @@ class Plotter(object):
         if mode=='traces':
             figs_dict['traces'] = self.plot_traces(recon['data'].mean(dim=0).detach().cpu().numpy(), orig, mode='activity', norm=True)
             figs_dict['traces'].suptitle('Actual fluorescence trace vs.\nestimated mean for a sampled trial')
-        
+
         elif mode=='video':
             # TODO
 #             figs_dict['videos'] = self.plot_video(recon['data'].mean(dim=0).detach().cpu().numpy(), orig)
@@ -73,7 +73,8 @@ class Plotter(object):
             if not os.path.exists(save_video_dir):
                 os.mkdir(save_video_dir)
             self.plot_video(recon['data'].mean(dim=0).detach().cpu().numpy(), orig, save_folder = save_video_dir)
-        
+            # figs_dict['traces'] = self.plot_factors(cout.mean(dim=0).detach().cpu().numpy())
+
         if self.truth:
             if 'rates' in self.truth.keys():
                 recon_rates = recon['rates'].mean(dim=1).cpu().numpy()
@@ -165,8 +166,7 @@ class Plotter(object):
     
     #------------------------------------------------------------------------------
     def plot_video(self, pred, true, save_folder): #
-        # TODO
-        # pass
+
         num_frames = true.shape[1]
         num_frames_pred = pred.shape[1]
         

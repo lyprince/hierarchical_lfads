@@ -59,7 +59,10 @@ class Conv3d_LFADS_Net(nn.Module):
         self.conv_dense_1 = nn.Linear(in_features= self.conv_output_size,
                                       out_features= self.conv_dense_size)
         self.conv_dense_2 = nn.Linear(in_features= self.factor_size,
+                                      out_features = self.conv_dense_size)
+        self.conv_dense_3 = nn.Linear(in_features= self.conv_dense_size,
                                       out_features = self.conv_output_size)
+        self.RELU = nn.ReLU()
         
         
 #         self.lfads_param = dict()
@@ -123,6 +126,8 @@ class Conv3d_LFADS_Net(nn.Module):
         x = x.reshape(x.shape[0],x.shape[1],-1)
 #         pdb.set_trace()
         x = self.conv_dense_1(x.view(batch_size, seq_len, w_out * h_out * num_out_ch))
+        x = self.RELU(x)
+        conv_out = x
         
         x = x.permute(1, 0, 2)
         lfads_tic = time.time()
@@ -131,7 +136,10 @@ class Conv3d_LFADS_Net(nn.Module):
         # print('conv t: ',conv_toc - conv_tic,' lfads t: ',lfads_toc - lfads_tic)
         x = factors
         x = x.permute(1, 0, 2)
-        x = self.conv_dense_2(x)
+        x = self.conv_dense_2(x).exp()
+        deconv_in = x
+        x = self.conv_dense_3(x)
+        x = self.RELU(x)
         
         # call LFADS here:
         # x should be reshaped for LFADS [time x batch x cells]:
@@ -160,7 +168,7 @@ class Conv3d_LFADS_Net(nn.Module):
         
         recon = {'data' : x}
 
-        return recon, (factors, gen_inputs), (g_posterior_mean,g_posterior_logvar)
+        return recon, (factors, gen_inputs), (g_posterior_mean,g_posterior_logvar), deconv_in
     
     def normalize_factors(self):
         self.lfads.normalize_factors()
@@ -238,6 +246,7 @@ class Conv3d_Block_2step(_ConvNd_Block):
         self.output_dims = self.get_output_dims()
         
 class Conv3d_Block_1step(_ConvNd_Block):
+
     def __init__(self, in_f, out_f,
                  kernel_size=(3, 3, 3),
                  dilation=(1, 1, 1),
@@ -278,7 +287,8 @@ class ConvTranspose3d_Block_1step(_ConvTransposeNd_Block):
         self.add_module('unpool1', nn.MaxUnpool3d(kernel_size=(1,4,4)))
         self.add_module('deconv1', nn.ConvTranspose3d(in_channels= in_f,
                                           out_channels= out_f,
-                                          kernel_size= 3,
-                                          padding= 1, 
+                                          kernel_size= (3,3,3),
+                                          padding= (1,1,1), 
                                           dilation= (1,1,1)))
+
         self.add_module('relu1', nn.ReLU())

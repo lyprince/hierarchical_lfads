@@ -175,7 +175,7 @@ def main():
         
     if factor_size == 3:
         for key in ['train', 'valid']:
-            fig = plot_3d(X=latent_dict[key]['latent_aligned'].T, title='rsq= %.3f'%results_dict[key]['latent_aligned']['rsq'])
+            fig = plot_3d(X=latent_dict[key]['latent_aligned'].T, title='rsq= %.3f'%results_dict[key]['latent_aligned']['rsq']) #latent_dict[key]['latent_aligned'].T
             fig.savefig(args.model_dir + 'figs/%s_factors3d_rsq.svg'%(key))
         
     pickle.dump(latent_dict, file=open('%slatent.pkl'%args.model_dir, 'wb'))
@@ -184,7 +184,7 @@ def main():
 def infer_and_recon(sample, batch_size, model):
     batch = batchify_sample(sample, batch_size)
     if isinstance(model,Conv3d_LFADS_Net):
-        recon, (factors, inputs), _ = model(batch)
+        recon, (factors, inputs), _, cout = model(batch)
     else:
         recon, (factors, inputs) = model(batch)
         
