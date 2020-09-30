@@ -64,7 +64,7 @@ def main():
             latent_dict[key]['latent'] = []
             #if True: #model_name != 'conv3d_lfads':
             latent_dict[key]['rates'] = []
-            if model_name == 'svlae' or model_name = 'conv3d_lfads':
+            if model_name == 'svlae' or model_name == 'conv3d_lfads':
                 latent_dict[key]['spikes'] = []
                 latent_dict[key]['fluor'] = []
             for x in dl.dataset:
@@ -74,7 +74,7 @@ def main():
                 #if True: #model_name != 'conv3d_lfads':
                 latent_dict[key]['rates'].append(result['rates'])
 
-                if model_name == 'svlae' or model_name = 'conv3d_lfads':
+                if model_name == 'svlae' or model_name == 'conv3d_lfads':
                     latent_dict[key]['spikes'].append(result['spikes'])
                     latent_dict[key]['fluor'].append(result['fluor'])
                     
@@ -117,8 +117,7 @@ def main():
     results_dict = {}
     for key in ['train', 'valid']:
         results_dict[key] = compare_truth(latent_dict[key], truth_dict[key])
-#         print(results_dict.keys())
-#         pdb.set_trace()
+
         for var, sub_dict in results_dict[key].items():
             sub_dict['fig'].savefig(args.model_dir + 'figs/%s_%s_rsq.svg'%(key, var))
 #             print(type(sub_dict['fig']))
@@ -189,7 +188,7 @@ def infer_and_recon(sample, batch_size, model):
     batch = batchify_sample(sample, batch_size)
     if isinstance(model,Conv3d_LFADS_Net):
         recon, (factors, inputs), _, _, cout = model(batch)
-        results['convout'] = cout
+        result['convout'] = cout
     else:
         recon, (factors, inputs) = model(batch)
         
@@ -273,6 +272,7 @@ def compare_truth(latent_dict, truth_dict):
 #         print(latent_dict.keys())
 #         print(truth_dict.keys())
         if var in latent_dict.keys() and var in truth_dict.keys():
+            print(var,latent_dict[var].shape,truth_dict[var].shape)
             results_dict[var] = compare(var, latent_dict, truth_dict)
             
     return results_dict
