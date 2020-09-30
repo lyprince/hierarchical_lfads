@@ -70,7 +70,7 @@ def main():
                 x = x[0]
                 result = infer_and_recon(x, batch_size=args.num_average, model=model)
                 latent_dict[key]['latent'].append(result['latent'])
-                if model_name != 'conv3d_lfads':
+                if True: #model_name != 'conv3d_lfads':
                     latent_dict[key]['rates'].append(result['rates'])
                 if model_name == 'svlae':
                     latent_dict[key]['spikes'].append(result['spikes'])
@@ -184,7 +184,7 @@ def main():
 def infer_and_recon(sample, batch_size, model):
     batch = batchify_sample(sample, batch_size)
     if isinstance(model,Conv3d_LFADS_Net):
-        recon, (factors, inputs), _, cout = model(batch)
+        recon, (factors, inputs), _, _, cout = model(batch)
     else:
         recon, (factors, inputs) = model(batch)
         

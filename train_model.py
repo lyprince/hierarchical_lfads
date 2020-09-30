@@ -164,7 +164,8 @@ def prep_model(model_name, data_dict, data_suffix, batch_size, device, hyperpara
         model, objective = prep_conv3d_lfads(input_dims = input_dims,
                                              hyperparams=hyperparams,
                                              device= device,
-                                             dtype=train_dl.dataset.dtype
+                                             dtype=train_dl.dataset.dtype,
+                                             dt=data_dict['dt']
                                              )
     else:
         raise NotImplementedError('Model must be one of \'lfads\', \'conv3d_lfads\', or \'svlae\'')
@@ -206,41 +207,79 @@ def prep_lfads(input_dims, hyperparams, device, dtype, dt):
 #-------------------------------------------------------------------
 #-------------------------------------------------------------------
     
-def prep_conv3d_lfads(input_dims, hyperparams, device, dtype):
+def prep_conv3d_lfads(input_dims, hyperparams, device, dtype, dt):
     
     from synthetic_data import SyntheticCalciumVideoDataset
-    from objective import Conv_LFADS_Loss, LogLikelihoodGaussian
+    from objective import Conv_LFADS_Loss, LogLikelihoodGaussian, LogLikelihoodPoissonSimplePlusL1
     from conv_lfads import Conv3d_LFADS_Net
     
-    model = Conv3d_LFADS_Net(input_dims      = input_dims,#(num_steps, width, height),
-                             conv_dense_size = hyperparams['model']['conv_dense_size'],
-                             channel_dims    = hyperparams['model']['channel_dims'],
-                             factor_size     = hyperparams['model']['factor_size'],
-                             g_encoder_size  = hyperparams['model']['g_encoder_size'],
-                             c_encoder_size  = hyperparams['model']['c_encoder_size'],
-                             g_latent_size   = hyperparams['model']['g_latent_size'],
-                             u_latent_size   = hyperparams['model']['u_latent_size'],
-                             controller_size = hyperparams['model']['controller_size'],
-                             generator_size  = hyperparams['model']['generator_size'],
-                             prior           = hyperparams['model']['prior'],
-                             clip_val        = hyperparams['model']['clip_val'],
-                             conv_dropout    = hyperparams['model']['conv_dropout'],
-                             lfads_dropout   = hyperparams['model']['lfads_dropout'],
-                             do_normalize_factors = hyperparams['model']['normalize_factors'],
-                             max_norm        = hyperparams['model']['max_norm'],
-                             device          = device).to(device)
+    # model = Conv3d_LFADS_Net(input_dims      = input_dims,#(num_steps, width, height),
+    #                          conv_dense_size = hyperparams['model']['conv_dense_size'],
+    #                          channel_dims    = hyperparams['model']['channel_dims'],
+    #                          factor_size     = hyperparams['model']['factor_size'],
+    #                          g_encoder_size  = hyperparams['model']['g_encoder_size'],
+    #                          c_encoder_size  = hyperparams['model']['c_encoder_size'],
+    #                          g_latent_size   = hyperparams['model']['g_latent_size'],
+    #                          u_latent_size   = hyperparams['model']['u_latent_size'],
+    #                          controller_size = hyperparams['model']['controller_size'],
+    #                          generator_size  = hyperparams['model']['generator_size'],
+    #                          prior           = hyperparams['model']['prior'],
+    #                          clip_val        = hyperparams['model']['clip_val'],
+    #                          conv_dropout    = hyperparams['model']['conv_dropout'],
+    #                          lfads_dropout   = hyperparams['model']['lfads_dropout'],
+    #                          do_normalize_factors = hyperparams['model']['normalize_factors'],
+    #                          max_norm        = hyperparams['model']['max_norm'],
+    #                          device          = device).to(device)
+    hyperparams['model']['obs']['tau']['value']/=float(dt)
+    model = Conv3d_LFADS_Net(input_dims             = input_dims, 
+                             channel_dims           = hyperparams['model']['channel_dims'], 
+                             obs_encoder_size       = hyperparams['model']['obs_encoder_size'], 
+                             obs_latent_size        = hyperparams['model']['obs_latent_size'],
+                             obs_controller_size    = hyperparams['model']['obs_controller_size'], 
+                             conv_dense_size        = hyperparams['model']['conv_dense_size'], 
+                             factor_size            = hyperparams['model']['factor_size'],
+                             g_encoder_size         = hyperparams['model']['g_encoder_size'], 
+                             c_encoder_size         = hyperparams['model']['c_encoder_size'],
+                             g_latent_size          = hyperparams['model']['g_latent_size'], 
+                             u_latent_size          = hyperparams['model']['u_latent_size'],
+                             controller_size        = hyperparams['model']['controller_size'], 
+                             generator_size         = hyperparams['model']['generator_size'],
+                             prior                  = hyperparams['model']['prior'],
+                             obs_params             = hyperparams['model']['obs'],
+                             deep_unfreeze_step     = hyperparams['model']['deep_unfreeze_step'], 
+                             obs_early_stop_step    = hyperparams['model']['obs_early_stop_step'], 
+                             generator_burn         = hyperparams['model']['generator_burn'], 
+                             obs_continue_step      = hyperparams['model']['obs_continue_step'], 
+                             ar1_start_step         = hyperparams['model']['ar1_start_step'], 
+                             clip_val               = hyperparams['model']['clip_val'], 
+                             max_norm               = hyperparams['model']['max_norm'], 
+                             lfads_dropout          = hyperparams['model']['lfads_dropout'], 
+                             conv_dropout           = hyperparams['model']['conv_dropout'],
+                             do_normalize_factors   = hyperparams['model']['normalize_factors'], 
+                             factor_bias            = hyperparams['model']['factor_bias'], 
+                             device                 = device).to(device)
     
-#     model = _CustomDataParallel(model).to(device)
+    # model = _CustomDataParallel(model).to(device)
     
     model.to(dtype=dtype)
     torch.set_default_dtype(dtype)
     
-    loglikelihood = LogLikelihoodGaussian()
-    objective = Conv_LFADS_Loss(loglikelihood=loglikelihood,
-                                loss_weight_dict={'kl': hyperparams['objective']['kl'],
-                                                  'l2': hyperparams['objective']['l2']},
-                                                   l2_con_scale= hyperparams['objective']['l2_con_scale'],
-                                                   l2_gen_scale= hyperparams['objective']['l2_gen_scale']).to(device)
+    obs_loglikelihood = LogLikelihoodGaussian()
+    deep_loglikelihood = LogLikelihoodPoissonSimplePlusL1(dt=float(dt))
+    objective = Conv_LFADS_Loss(obs_loglikelihood   = obs_loglikelihood,
+                                deep_loglikelihood       = deep_loglikelihood,
+                                loss_weight_dict         = {'kl_deep'    : hyperparams['objective']['kl_deep'],
+                                                       'kl_obs'     : hyperparams['objective']['kl_obs'],
+                                                       'l2'         : hyperparams['objective']['l2'],
+                                                       'recon_deep' : hyperparams['objective']['recon_deep']},
+                                l2_con_scale             = hyperparams['objective']['l2_con_scale'],
+                                l2_gen_scale             = hyperparams['objective']['l2_gen_scale']).to(device)
+
+    # objective = Conv_LFADS_Loss(loglikelihood=loglikelihood,
+    #                             loss_weight_dict={'kl': hyperparams['objective']['kl'],
+    #                                               'l2': hyperparams['objective']['l2']},
+    #                                                l2_con_scale= hyperparams['objective']['l2_con_scale'],
+    #                                                l2_gen_scale= hyperparams['objective']['l2_gen_scale']).to(device)
     
     
     return model, objective
@@ -265,7 +304,6 @@ def prep_svlae(input_dims, hyperparams, device, dtype, dt):
                            l2_gen_scale             = hyperparams['objective']['l2_gen_scale']).to(device)
     
     hyperparams['model']['obs']['tau']['value']/=float(dt)
-    
     model = SVLAE_Net(input_size            = input_dims,
                       factor_size           = hyperparams['model']['factor_size'],
                       obs_encoder_size      = hyperparams['model']['obs_encoder_size'],
@@ -509,23 +547,34 @@ def load_model(save_loc, hyperparams, model_name, input_dims):
     
     if model_name == 'conv3d_lfads':
 
-        model = Conv3d_LFADS_Net(input_dims      = input_dims,
-                    conv_dense_size = hyperparams['model']['conv_dense_size'],
-                    channel_dims    = hyperparams['model']['channel_dims'],
-                    factor_size     = hyperparams['model']['factor_size'],
-                    g_encoder_size  = hyperparams['model']['g_encoder_size'],
-                    c_encoder_size  = hyperparams['model']['c_encoder_size'],
-                    g_latent_size   = hyperparams['model']['g_latent_size'],
-                    u_latent_size   = hyperparams['model']['u_latent_size'],
-                    controller_size = hyperparams['model']['controller_size'],
-                    generator_size  = hyperparams['model']['generator_size'],
-                    prior           = hyperparams['model']['prior'],
-                    clip_val        = hyperparams['model']['clip_val'],
-                    conv_dropout    = hyperparams['model']['conv_dropout'],
-                    lfads_dropout   = hyperparams['model']['lfads_dropout'],
-                    do_normalize_factors = hyperparams['model']['normalize_factors'],
-                    max_norm        = hyperparams['model']['max_norm'],
-                    device          = 'cuda:0')
+        model = Conv3d_LFADS_Net(input_dims             = input_dims, 
+                             channel_dims           = hyperparams['model']['channel_dims'], 
+                             obs_encoder_size       = hyperparams['model']['obs_encoder_size'], 
+                             obs_latent_size        = hyperparams['model']['obs_latent_size'],
+                             obs_controller_size    = hyperparams['model']['obs_controller_size'], 
+                             conv_dense_size        = hyperparams['model']['conv_dense_size'], 
+                             factor_size            = hyperparams['model']['factor_size'],
+                             g_encoder_size         = hyperparams['model']['g_encoder_size'], 
+                             c_encoder_size         = hyperparams['model']['c_encoder_size'],
+                             g_latent_size          = hyperparams['model']['g_latent_size'], 
+                             u_latent_size          = hyperparams['model']['u_latent_size'],
+                             controller_size        = hyperparams['model']['controller_size'], 
+                             generator_size         = hyperparams['model']['generator_size'],
+                             prior                  = hyperparams['model']['prior'],
+                             obs_params             = hyperparams['model']['obs'],
+                             deep_unfreeze_step     = hyperparams['model']['deep_unfreeze_step'], 
+                             obs_early_stop_step    = hyperparams['model']['obs_early_stop_step'], 
+                             generator_burn         = hyperparams['model']['generator_burn'], 
+                             obs_continue_step      = hyperparams['model']['obs_continue_step'], 
+                             ar1_start_step         = hyperparams['model']['ar1_start_step'], 
+                             clip_val               = hyperparams['model']['clip_val'], 
+                             max_norm               = hyperparams['model']['max_norm'], 
+                             lfads_dropout          = hyperparams['model']['lfads_dropout'], 
+                             conv_dropout           = hyperparams['model']['conv_dropout'],
+                             do_normalize_factors   = hyperparams['model']['normalize_factors'], 
+                             factor_bias            = hyperparams['model']['factor_bias'], 
+                             device                 = 'cuda:0')
+
         state_dict = torch.load(save_loc + 'checkpoints/'+'best.pth')
         model.load_state_dict(state_dict['net'])
         model = model.to('cuda:0')

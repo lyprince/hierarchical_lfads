@@ -1,25 +1,39 @@
 import torch
 import torch.nn as nn
 from lfads import LFADS_Net
+from svlae import SVLAE_Net
 import time
 import pdb
 
 class Conv3d_LFADS_Net(nn.Module):
-    def __init__(self, input_dims = (100, 128, 128), channel_dims = (16, 32), 
-                 conv_dense_size = 64, factor_size = 4,
-                 g_encoder_size  = 64, c_encoder_size = 64,
-                 g_latent_size   = 64, u_latent_size  = 1,
-                 controller_size = 64, generator_size = 64,
-                 prior = {'g0' : {'mean' : {'value': 0.0, 'learnable' : True},
+    def __init__(self,
+                input_dims = (100, 128, 128), channel_dims = (16, 32), 
+                obs_encoder_size = 32, obs_latent_size = 64,
+                obs_controller_size = 32, 
+                conv_dense_size = 64, factor_size = 4,
+                g_encoder_size  = 64, c_encoder_size = 64,
+                g_latent_size   = 64, u_latent_size  = 1,
+                controller_size = 64, generator_size = 64,
+                prior = {'g0' : {'mean' : {'value': 0.0, 'learnable' : True},
                                   'var'  : {'value': 0.1, 'learnable' : False}},
                           'u'  : {'mean' : {'value': 0.0, 'learnable' : False},
                                   'var'  : {'value': 0.1, 'learnable' : True},
                                   'tau'  : {'value': 10,  'learnable' : True}}},
-                 clip_val=5.0, max_norm = 200, lfads_dropout=0.0, conv_dropout=0.0,
-                 do_normalize_factors=True, factor_bias = False, device='cpu'):
+                obs_params = {'gain' : {'value' : 1.0, 'learnable' : False},
+                               'bias' : {'value' : 0.0, 'learnable' : False},
+                               'tau'  : {'value' : 10., 'learnable' : False},
+                               'var'  : {'value' : 0.1, 'learnable' : True}},
+                deep_unfreeze_step = 1600, obs_early_stop_step = 2000, 
+                generator_burn = 0, obs_continue_step  = 8000, 
+                ar1_start_step = 4000, clip_val=5.0, 
+                max_norm = 200, lfads_dropout=0.0, 
+                conv_dropout=0.0,do_normalize_factors=True, 
+                factor_bias = False, device='cpu'):
         super(Conv3d_LFADS_Net, self).__init__()
-        
         self.factor_size = factor_size
+        self.obs_encoder_size = obs_encoder_size
+        self.obs_latent_size = obs_latent_size
+        self.obs_controller_size = obs_controller_size
         self.g_encoder_size = g_encoder_size
         self.c_encoder_size = c_encoder_size
         self.g_latent_size = g_latent_size
@@ -68,31 +82,55 @@ class Conv3d_LFADS_Net(nn.Module):
 #         self.lfads_param = dict()
         print(self.device)
         print(torch.cuda.device_count())
-        self.lfads = LFADS_Net(input_size= self.conv_dense_size,
-                               g_encoder_size=self.g_encoder_size,
-                               c_encoder_size=self.c_encoder_size,
-                               g_latent_size=self.g_latent_size,
-                               u_latent_size=self.u_latent_size,
-                               controller_size=self.controller_size,
-                               generator_size=self.generator_size,
-                               factor_size=self.factor_size,
-                               prior=prior,
-                               clip_val=self.clip_val,
-                               dropout=lfads_dropout,
-                               max_norm=self.max_norm,
-                               do_normalize_factors=self.do_normalize_factors,
-                               factor_bias=self.factor_bias,
-                               device= self.device)
+        # self.lfads = LFADS_Net(input_size= self.conv_dense_size,
+        #                     g_encoder_size=self.g_encoder_size,
+        #                     c_encoder_size=self.c_encoder_size,
+        #                     g_latent_size=self.g_latent_size,
+        #                     u_latent_size=self.u_latent_size,
+        #                     controller_size=self.controller_size,
+        #                     generator_size=self.generator_size,
+        #                     factor_size=self.factor_size,
+        #                     prior=prior,
+        #                     clip_val=self.clip_val,
+        #                     dropout=lfads_dropout,
+        #                     max_norm=self.max_norm,
+        #                     do_normalize_factors=self.do_normalize_factors,
+        #                     factor_bias=self.factor_bias,
+        #                     device= self.device)
+        self.calfads = SVLAE_Net(input_size = self.conv_dense_size,
+                    factor_size           = self.factor_size,
+                    obs_encoder_size      = self.obs_encoder_size,
+                    obs_latent_size       = self.obs_latent_size,
+                    obs_controller_size   = self.obs_controller_size,
+                    deep_g_encoder_size   = self.g_encoder_size,
+                    deep_c_encoder_size   = self.c_encoder_size,
+                    deep_g_latent_size    = self.g_latent_size,
+                    deep_u_latent_size    = self.u_latent_size,
+                    deep_controller_size  = self.controller_size,
+                    generator_size        = self.generator_size,
+                    prior                 = prior,
+                    clip_val              = self.clip_val,
+                    generator_burn        = generator_burn,
+                    dropout               = lfads_dropout,
+                    do_normalize_factors  = self.do_normalize_factors,
+                    factor_bias           = self.factor_bias,
+                    max_norm              = self.max_norm,
+                    deep_unfreeze_step    = deep_unfreeze_step,
+                    obs_early_stop_step   = obs_early_stop_step,
+                    obs_continue_step     = obs_continue_step,
+                    ar1_start_step        = ar1_start_step,
+                    obs_params            = obs_params,
+                    device                = self.device)
         
+        self.register_parameter('u_posterior_mean',None)
+        self.register_parameter('u_posterior_logvar',None)
         self.register_parameter('g_posterior_mean',None)
         self.register_parameter('g_posterior_logvar',None)
-        self.register_parameter('g_prior_mean',self.lfads.g_prior_mean)
-        self.register_buffer('g_prior_logvar',self.lfads.g_prior_logvar)
-        
-#         self.lfads_param['g_posterior_mean'] = self.lfads.g_posterior_mean
-#         self.lfads_param['g_posterior_logvar'] = self.lfads.g_posterior_logvar
-#         self.lfads_param['g_prior_mean'] = self.lfads.g_prior_mean
-#         self.lfads_param['g_prior_logvar'] = self.lfads.g_prior_logvar
+
+        self.register_parameter('g_prior_mean',self.calfads.deep_model.g_prior_mean)
+        self.register_buffer('g_prior_logvar',self.calfads.deep_model.g_prior_logvar)
+        self.register_parameter('u_prior_mean',self.calfads.obs_model.u_prior_mean)
+        self.register_buffer('u_prior_logvar',self.calfads.obs_model.u_prior_logvar)
         
         
         
@@ -129,17 +167,20 @@ class Conv3d_LFADS_Net(nn.Module):
         x = self.RELU(x)
         conv_out = x
         
-        x = x.permute(1, 0, 2)
+        # x = x.permute(1, 0, 2)
         lfads_tic = time.time()
-        factors, gen_inputs = self.lfads(x)
+        # factors, gen_inputs = self.lfads(x)
+        
+        recon_calfads, (factors, deep_gen_inputs) = self.calfads(x)
         lfads_toc = time.time()
         # print('conv t: ',conv_toc - conv_tic,' lfads t: ',lfads_toc - lfads_tic)
-        x = factors
-        x = x.permute(1, 0, 2)
-        x = self.conv_dense_2(x).exp()
+        # x = factors
+        x = recon_calfads['data']
+        # x = x.permute(1, 0, 2)
+        # x = self.conv_dense_2(x).exp()
         deconv_in = x
         x = self.conv_dense_3(x)
-        x = self.RELU(x)
+        # x = self.RELU(x)
         
         # call LFADS here:
         # x should be reshaped for LFADS [time x batch x cells]:
@@ -160,18 +201,24 @@ class Conv3d_LFADS_Net(nn.Module):
         x = x.permute(0, 2, 1, 3, 4, 5)
         x = x.view(batch_size, 1, seq_len, w, h)
         
-        g_posterior = dict()
-#         g_posterior['mean'] = self.lfads.g_posterior_mean
-#         g_posterior['logvar'] = self.lfads.g_posterior_logvar
-        g_posterior_mean = self.lfads.g_posterior_mean
-        g_posterior_logvar = self.lfads.g_posterior_logvar
-        
-        recon = {'data' : x}
+        # g_posterior = dict()
+        # g_posterior_mean = self.lfads.g_posterior_mean
+        # g_posterior_logvar = self.lfads.g_posterior_logvar
+        u_posterior_mean = self.calfads.obs_model.u_posterior_mean
+        u_posterior_logvar = self.calfads.obs_model.u_posterior_logvar
 
-        return recon, (factors, gen_inputs), (g_posterior_mean,g_posterior_logvar), deconv_in
+        g_posterior_mean = self.calfads.deep_model.g_posterior_mean
+        g_posterior_logvar = self.calfads.deep_model.g_posterior_logvar
+        
+        recon = {}
+        recon['data'] = x
+        recon['spikes'] = recon_calfads['spikes']
+        recon['rates'] = recon_calfads['rates']
+
+        return recon, (factors, deep_gen_inputs), (g_posterior_mean,g_posterior_logvar), (u_posterior_mean, u_posterior_logvar), conv_out
     
     def normalize_factors(self):
-        self.lfads.normalize_factors()
+        self.calfads.deep_model.normalize_factors()
         
     def change_parameter_grad_status(self, step, optimizer, scheduler, loading_checkpoint=False):
         return optimizer, scheduler
@@ -248,11 +295,11 @@ class Conv3d_Block_2step(_ConvNd_Block):
 class Conv3d_Block_1step(_ConvNd_Block):
 
     def __init__(self, in_f, out_f,
-                 kernel_size=(3, 3, 3),
+                 kernel_size=(1, 3, 3),
                  dilation=(1, 1, 1),
-                 padding=(1, 1, 1),
+                 padding=(0, 1, 1),
                  stride=(1, 1, 1),
-                 pool_size=(1, 4, 4),
+                 pool_size=(1, 2, 2),
                  input_dims=(100, 100, 100)):
         super(Conv3d_Block_1step, self).__init__(input_dims)
         
@@ -284,11 +331,11 @@ class ConvTranspose3d_Block_1step(_ConvTransposeNd_Block):
     def __init__(self, in_f, out_f):
         super(ConvTranspose3d_Block_1step, self).__init__()
         
-        self.add_module('unpool1', nn.MaxUnpool3d(kernel_size=(1,4,4)))
+        self.add_module('unpool1', nn.MaxUnpool3d(kernel_size=(1,2,2)))
         self.add_module('deconv1', nn.ConvTranspose3d(in_channels= in_f,
                                           out_channels= out_f,
-                                          kernel_size= (3,3,3),
-                                          padding= (1,1,1), 
+                                          kernel_size= (1,3,3),
+                                          padding= (0,1,1), 
                                           dilation= (1,1,1)))
 
         self.add_module('relu1', nn.ReLU())

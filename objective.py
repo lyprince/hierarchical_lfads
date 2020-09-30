@@ -138,23 +138,34 @@ class LFADS_Loss(Base_Loss):
 
         return loss, loss_dict
     
-class Conv_LFADS_Loss(LFADS_Loss):
+class Conv_LFADS_Loss(SVLAE_Loss):
     
-    def __init__(self, loglikelihood,
-                 loss_weight_dict= {'kl' : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 0, 'max' : 1.0, 'min' : 0.0},
-                                    'l2' : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 0, 'max' : 1.0, 'min' : 0.0}},
+    def __init__(self, deep_loglikelihood, obs_loglikelihood,
+                 loss_weight_dict= {'kl_obs' : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 0,    'max' : 1.0, 'min' : 0.0},
+                                     'kl_deep': {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 2000, 'max' : 1.0, 'min' : 0.0},
+                                     'l2'     : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 2000, 'max' : 1.0, 'min' : 0.0},
+                                     'recon_deep' : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 2000, 'max' : 1.0, 'min' : 0.0}},
                  l2_con_scale=0.0, l2_gen_scale=0.0):
         
-        super(Conv_LFADS_Loss, self).__init__(loglikelihood=loglikelihood,
-                                              loss_weight_dict=loss_weight_dict,
-                                              l2_con_scale=l2_con_scale,
-                                              l2_gen_scale=l2_gen_scale)
+        super(Conv_LFADS_Loss, self).__init__(loglikelihood_deep = deep_loglikelihood,
+                                                loglikelihood_obs = obs_loglikelihood,
+                                                loss_weight_dict = loss_weight_dict,
+                                                l2_con_scale = l2_con_scale,
+                                                l2_gen_scale = l2_gen_scale)
+
         
         
-    def forward(self, x_orig, x_recon, g_posterior, model):
-        kl_weight = self.loss_weights['kl']['weight']
+    def forward(self, x_orig, x_recon, g_posterior, u_posterior, model):
+        kl_obs_weight = self.loss_weights['kl_obs']['weight']
+        kl_deep_weight = self.loss_weights['kl_deep']['weight']
         l2_weight = self.loss_weights['l2']['weight']
-        recon_loss = self.loglikelihood(x_orig, x_recon['data'])
+        recon_deep_weight = self.loss_weights['recon_deep']['weight']
+
+        recon_obs_loss  = self.loglikelihood_obs(x_orig, x_recon['data'])
+        recon_deep_loss = -self.loglikelihood_deep(x_recon['spikes'].permute(1, 0, 2), x_recon['rates'].permute(1, 0, 2))
+        recon_deep_loss = recon_deep_weight * recon_deep_loss
+
+        # recon_loss = self.loglikelihood(x_orig, x_recon['data'])
         
 #         kl_loss = 1.0
 #         g_posterior_mean = g_posterior['mean']#model.g_posterior_mean
@@ -163,15 +174,29 @@ class Conv_LFADS_Loss(LFADS_Loss):
         g_posterior_logvar = g_posterior[1]
         g_prior_mean = model.g_prior_mean
         g_prior_logvar = model.g_prior_logvar
+        u_posterior_mean = u_posterior[0]
+        u_posterior_logvar = u_posterior[1]
+        u_prior_mean = model.u_prior_mean
+        u_prior_logvar = model.u_prior_logvar
+
+        kl_obs_loss = kl_obs_weight * kldiv_gaussian_gaussian(post_mu  = g_posterior_mean.to(torch.float32),
+                                                                post_lv  = g_posterior_logvar.to(torch.float32),
+                                                                prior_mu = g_prior_mean.to(torch.float32),
+                                                                prior_lv = g_prior_logvar.to(torch.float32)).to(dtype=x_orig.dtype)
+
+        kl_deep_loss = kl_deep_weight * kldiv_gaussian_gaussian(post_mu  = u_posterior_mean.to(torch.float32),
+                                                                post_lv  = u_posterior_logvar.to(torch.float32),
+                                                                prior_mu = u_prior_mean.to(torch.float32),
+                                                                prior_lv = u_prior_logvar.to(torch.float32)).to(dtype=x_orig.dtype)
         
-        kl_loss = kl_weight * kldiv_gaussian_gaussian(post_mu  = g_posterior_mean.to(torch.float32),
-                                                      post_lv  = g_posterior_logvar.to(torch.float32),
-                                                      prior_mu = g_prior_mean.to(torch.float32),
-                                                      prior_lv = g_prior_logvar.to(torch.float32)).to(dtype=x_orig.dtype)
+        # kl_loss = kl_weight * kldiv_gaussian_gaussian(post_mu  = g_posterior_mean.to(torch.float32),
+        #                                               post_lv  = g_posterior_logvar.to(torch.float32),
+        #                                               prior_mu = g_prior_mean.to(torch.float32),
+        #                                               prior_lv = g_prior_logvar.to(torch.float32)).to(dtype=x_orig.dtype)
 #         kl_loss = kl_weight * kldiv_gaussian_gaussian(post_mu  = model.lfads.g_posterior_mean.to(torch.float32), post_lv  = model.lfads.g_posterior_logvar.to(torch.float32), prior_mu = model.lfads.g_prior_mean.to(torch.float32), prior_lv = model.lfads.g_prior_logvar.to(torch.float32)).to(dtype=x_orig.dtype)
         
 #         l2_loss = 1.0
-        l2_loss = 0.5 * l2_weight * self.l2_gen_scale * model.lfads.generator.gru_generator.hidden_weight_l2_norm()
+        l2_loss = 0.5 * l2_weight * self.l2_gen_scale * model.calfads.deep_model.generator.gru_generator.hidden_weight_l2_norm()
     
         if hasattr(model, 'controller'):
             kl_loss += kl_weight * kldiv_gaussian_gaussian(post_mu  = model.lfads.u_posterior_mean.to(torch.float32),
@@ -181,11 +206,18 @@ class Conv_LFADS_Loss(LFADS_Loss):
             
             l2_loss += 0.5 * l2_weight * self.l2_con_scale * model.lfads.controller.gru_controller.hidden_weight_l2_norm()
             
-        loss = recon_loss +  kl_loss + l2_loss
-        loss_dict = {'recon' : float(recon_loss.data),
-                     'kl'    : float(kl_loss.data),
-                     'l2'    : float(l2_loss.data),
-                     'total' : float(loss.data)}
+        # loss = recon_loss +  kl_loss + l2_loss
+        # loss_dict = {'recon' : float(recon_loss.data),
+        #              'kl'    : float(kl_loss.data),
+        #              'l2'    : float(l2_loss.data),
+        #              'total' : float(loss.data)}
+        loss = recon_obs_loss + recon_deep_loss +  kl_obs_loss + kl_deep_loss + l2_loss
+        loss_dict = {'recon_obs'  : float(recon_obs_loss.data),
+                     'recon_deep' : float(recon_deep_loss.data),
+                     'kl_obs'     : float(kl_obs_loss.data),
+                     'kl_deep'    : float(kl_deep_loss.data),
+                     'l2'         : float(l2_loss.data),
+                     'total'      : float(loss.data)}
 
         return loss, loss_dict
         

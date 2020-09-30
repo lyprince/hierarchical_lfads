@@ -53,7 +53,7 @@ class Plotter(object):
         model.eval()
         with torch.no_grad():
             if isinstance(model,Conv3d_LFADS_Net):
-                recon, (factors, inputs), g_posterior, cout = model(batch_example)
+                recon, (factors, inputs), g_posterior, u_posterior, cout = model(batch_example)
             else:
                 recon, (factors, inputs) = model(batch_example)
         
@@ -73,7 +73,8 @@ class Plotter(object):
             if not os.path.exists(save_video_dir):
                 os.mkdir(save_video_dir)
             self.plot_video(recon['data'].mean(dim=0).detach().cpu().numpy(), orig, save_folder = save_video_dir)
-            # figs_dict['traces'] = self.plot_factors(cout.mean(dim=0).detach().cpu().numpy())
+            figs_dict['traces'] = self.plot_factors(cout.mean(dim=0).detach().cpu().numpy())
+            figs_dict['rates'] = self.plot_factors(recon['rates'].mean(dim=1).detach().cpu().numpy())
 
         if self.truth:
             if 'rates' in self.truth.keys():

@@ -52,6 +52,7 @@ class RunManager():
             self.model.train()
 #             print(len(self.train_dl))
             for i,x in enumerate(self.train_dl):
+#                 print('iter',i)
                 tr_tic = time.time()
 #                 print(x[0].session)
                 x = x[0]
@@ -59,19 +60,21 @@ class RunManager():
                 self.optimizer.zero_grad()
                 fw_tic = time.time()
                 
-                if isinstance(self.model.module,Conv3d_LFADS_Net):
+                if isinstance(self.model.module,Conv3d_LFADS_Net): #self.model.module
 
-                    recon, latent, g, cout = self.model(x)
+                    recon, (latent, g_in), g, u, cout = self.model(x)
                     loss, loss_dict = self.objective(x_orig= x,
                                                      x_recon= recon,
                                                      g_posterior = g,
+                                                     u_posterior = u,
                                                      model= self.model)
-                else:
                     
+                else:
                     recon, latent = self.model(x)
                     loss, loss_dict = self.objective(x_orig= x,
                                                      x_recon= recon,
                                                      model= self.model)
+                    
                     
 #                 print('fw time: ', time.time()-fw_tic)
                 loss_tic = time.time()
@@ -134,10 +137,10 @@ class RunManager():
                 with torch.no_grad():
                     x = x[0]
                     fw_val_tic = time.time()
-                    if isinstance(self.model.module,Conv3d_LFADS_Net):
-                        recon, latent, g, cout = self.model(x)
+                    if isinstance(self.model.module,Conv3d_LFADS_Net): #self.model.module
+                        recon, (latent, g_in), g, u, cout = self.model(x)
 #                     print('fw val time: ',time.time()-fw_val_tic)
-                        loss, loss_dict = self.objective(x_orig= x, x_recon= recon, g_posterior = g, model= self.model)
+                        loss, loss_dict = self.objective(x_orig= x, x_recon= recon, g_posterior = g, u_posterior = u, model= self.model)
                     else:
                         recon, latent = self.model(x)
 #                     print('fw val time: ',time.time()-fw_val_tic)
@@ -275,7 +278,6 @@ class RunManager():
         # Save network parameters, optimizer state, and training variables
         if not os.path.isdir(self.save_loc+'checkpoints/'):
             os.mkdir(self.save_loc+'checkpoints/')
-        
         if torch.cuda.device_count() > 1:
             torch.save({'net' : self.model.module.state_dict(), 'opt' : self.optimizer.state_dict(),
                         'sched': self.scheduler.state_dict(), 'run_manager' : train_dict},
