@@ -60,19 +60,21 @@ def main():
     with torch.no_grad():
         
         for dl, key in ((train_dl, 'train'), (valid_dl, 'valid')):
+
             latent_dict[key]['latent'] = []
-            if model_name != 'conv3d_lfads':
-                latent_dict[key]['rates'] = []
-            if model_name == 'svlae':
+            #if True: #model_name != 'conv3d_lfads':
+            latent_dict[key]['rates'] = []
+            if model_name == 'svlae' or model_name = 'conv3d_lfads':
                 latent_dict[key]['spikes'] = []
                 latent_dict[key]['fluor'] = []
             for x in dl.dataset:
                 x = x[0]
                 result = infer_and_recon(x, batch_size=args.num_average, model=model)
                 latent_dict[key]['latent'].append(result['latent'])
-                if True: #model_name != 'conv3d_lfads':
-                    latent_dict[key]['rates'].append(result['rates'])
-                if model_name == 'svlae':
+                #if True: #model_name != 'conv3d_lfads':
+                latent_dict[key]['rates'].append(result['rates'])
+
+                if model_name == 'svlae' or model_name = 'conv3d_lfads':
                     latent_dict[key]['spikes'].append(result['spikes'])
                     latent_dict[key]['fluor'].append(result['fluor'])
                     
@@ -182,13 +184,16 @@ def main():
     pickle.dump(results_dict, file=open('%sresults.pkl'%args.model_dir, 'wb'))
     
 def infer_and_recon(sample, batch_size, model):
+
+    result = {}
     batch = batchify_sample(sample, batch_size)
     if isinstance(model,Conv3d_LFADS_Net):
         recon, (factors, inputs), _, _, cout = model(batch)
+        results['convout'] = cout
     else:
         recon, (factors, inputs) = model(batch)
         
-    result = {}
+    
     result['latent'] = factors.mean(dim=1).cpu().numpy()
     if 'rates' in recon.keys():
         result['rates'] = recon['rates'].mean(dim=1).cpu().numpy()
