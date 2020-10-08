@@ -62,8 +62,8 @@ def main():
         for dl, key in ((train_dl, 'train'), (valid_dl, 'valid')):
 
             latent_dict[key]['latent'] = []
-            #if True: #model_name != 'conv3d_lfads':
-            latent_dict[key]['rates'] = []
+            if model_name != 'conv3d_lfads':
+                latent_dict[key]['rates'] = []
             if model_name == 'svlae' or model_name == 'conv3d_lfads':
                 latent_dict[key]['spikes'] = []
                 latent_dict[key]['fluor'] = []
@@ -71,8 +71,8 @@ def main():
                 x = x[0]
                 result = infer_and_recon(x, batch_size=args.num_average, model=model)
                 latent_dict[key]['latent'].append(result['latent'])
-                #if True: #model_name != 'conv3d_lfads':
-                latent_dict[key]['rates'].append(result['rates'])
+                if model_name != 'conv3d_lfads':
+                    latent_dict[key]['rates'].append(result['rates'])
 
                 if model_name == 'svlae' or model_name == 'conv3d_lfads':
                     latent_dict[key]['spikes'].append(result['spikes'])
@@ -107,6 +107,15 @@ def main():
                     latent_dict[key]['latent_aligned'] = L_train.predict(np.concatenate(latent_dict[key][var]))
                     truth_dict[key]['latent_aligned'] = np.concatenate(truth_dict[key]['latent'])
                 
+                if var == 'fluor' and model_name == 'conv3d_lfads':
+                    if data_dict_key == 'train_fluor':
+#                         pdb.set_trace()
+                        F_train = fit_linear_model(np.concatenate(latent_dict[key][var][:, 10:]),
+                                                   np.concatenate(truth_dict[key][var][:, 10:]))
+                    latent_dict[key]['fluor_aligned'] = F_train.predict(np.concatenate(latent_dict[key][var]))
+                    truth_dict[key]['fluor_aligned'] = np.concatenate(truth_dict[key]['fluor'])
+    
+                
 
                 
 #             if var == 'fluor':
@@ -116,7 +125,7 @@ def main():
     
     results_dict = {}
     for key in ['train', 'valid']:
-        results_dict[key] = compare_truth(latent_dict[key], truth_dict[key])
+        results_dict[key] = compare_truth(latent_dict[key], truth_dict[key], model_name)
 
         for var, sub_dict in results_dict[key].items():
             sub_dict['fig'].savefig(args.model_dir + 'figs/%s_%s_rsq.svg'%(key, var))
@@ -200,7 +209,10 @@ def infer_and_recon(sample, batch_size, model):
         result['inputs'] = inputs.mean(dim=1).cpu().numpy()
     if 'spikes' in recon.keys():
         result['spikes'] = recon['spikes'].mean(dim=1).cpu().numpy()
-        result['fluor'] = recon['data'].mean(dim=0).cpu().numpy()
+        if isinstance(model,Conv3d_LFADS_Net):
+            result['fluor'] = result['convout'].mean(dim=0).cpu().numpy()
+        else:
+            result['fluor'] = recon['data'].mean(dim=0).cpu().numpy()
     return result
     
 from sklearn.linear_model import LinearRegression
@@ -256,7 +268,7 @@ def plot_rsquared(x, y, figsize=(4,4), ms=1, title=''):
 
     return fig
 
-def compare_truth(latent_dict, truth_dict):
+def compare_truth(latent_dict, truth_dict, model_name):
     results_dict = {}
     def compare(key, x_dict, y_dict, save=True):
         results_dict = {}
@@ -267,12 +279,15 @@ def compare_truth(latent_dict, truth_dict):
                                             title='rsq= %.3f'%results_dict['rsq'])
         
         return results_dict
-    
-    for var in ['rates', 'spikes', 'fluor', 'latent_aligned']:
+    if model_name == 'conv3d_lfads':
+        Vars = ['latent_aligned', 'fluor_aligned']
+    else:
+        Vars = ['rates', 'spikes', 'fluor', 'latent_aligned', 'fluor_aligned']
+            
+    for var in Vars:
 #         print(latent_dict.keys())
 #         print(truth_dict.keys())
         if var in latent_dict.keys() and var in truth_dict.keys():
-            print(var,latent_dict[var].shape,truth_dict[var].shape)
             results_dict[var] = compare(var, latent_dict, truth_dict)
             
     return results_dict
