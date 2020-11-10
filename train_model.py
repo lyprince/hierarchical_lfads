@@ -535,7 +535,7 @@ def save_figs(save_loc, model, dl, plotter, mode):
     from matplotlib.figure import Figure
     import matplotlib
     matplotlib.use('Agg')
-    fig_dict = plotter['valid'].plot_summary(model= model,mode=mode, num_average=50, save_dir = fig_folder, dl= dl)
+    fig_dict = plotter['valid'].plot_summary(model= model,mode=mode, num_average=20, save_dir = fig_folder, dl= dl)
     for k, v in fig_dict.items():
         if type(v) == Figure:
             v.savefig(fig_folder+k+'.svg')
