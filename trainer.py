@@ -6,6 +6,7 @@ import os
 import pdb
 import functools, collections, operator
 
+from conv_lfads import Conv3d_LFADS_Net
 
 class RunManager():
     def __init__(self, model, objective, optimizer, scheduler,
@@ -51,6 +52,7 @@ class RunManager():
             self.model.train()
 #             print(len(self.train_dl))
             for i,x in enumerate(self.train_dl):
+#                 print('iter',i)
                 tr_tic = time.time()
 #                 print(x[0].session)
                 x = x[0]
@@ -63,6 +65,7 @@ class RunManager():
                 loss, loss_dict = self.objective(x_orig= x,
                                                  x_recon= recon,
                                                  model= self.model)                
+
 #                 print('loss time: ', time.time()-loss_tic)
                 loss_dict_list.append(loss_dict)
                 
@@ -122,6 +125,7 @@ class RunManager():
                     recon, latent = self.model(x)
 #                     print('fw val time: ',time.time()-fw_val_tic)
                     loss, loss_dict = self.objective(x_orig= x, x_recon= recon, model= self.model)
+
                     loss_dict_list.append(loss_dict)
                     
             valid_data = x.clone()
@@ -257,6 +261,7 @@ class RunManager():
         torch.save({'net' : self.model.state_dict(), 'opt' : self.optimizer.state_dict(),
                     'sched': self.scheduler.state_dict(), 'run_manager' : train_dict},
                      self.save_loc+'checkpoints/' + output_filename + '.pth')
+
         
     #------------------------------------------------------------------------------
     #------------------------------------------------------------------------------

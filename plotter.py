@@ -6,6 +6,8 @@ import os
 
 from utils import batchify_random_sample
 
+from conv_lfads import Conv3d_LFADS_Net
+
 class Plotter(object):
     def __init__(self, time, truth=None, base_fontsize=14):
         self.dt = np.diff(time)[0]
@@ -51,6 +53,7 @@ class Plotter(object):
         model.eval()
         with torch.no_grad():
             recon, (factors, inputs) = model(batch_example)
+
         
         orig = batch_example[0].cpu().numpy()
 #         print(batch_example.shape, data.shape, recon['data'].shape)
@@ -60,7 +63,7 @@ class Plotter(object):
         if mode=='traces':
             figs_dict['traces'] = self.plot_traces(recon['data'].mean(dim=0).detach().cpu().numpy(), orig, mode='activity', norm=True)
             figs_dict['traces'].suptitle('Actual fluorescence trace vs.\nestimated mean for a sampled trial')
-        
+
         elif mode=='video':
             # TODO
 #             figs_dict['videos'] = self.plot_video(recon['data'].mean(dim=0).detach().cpu().numpy(), orig)
@@ -68,7 +71,9 @@ class Plotter(object):
             if not os.path.exists(save_video_dir):
                 os.mkdir(save_video_dir)
             self.plot_video(recon['data'].mean(dim=0).detach().cpu().numpy(), orig, save_folder = save_video_dir)
-        
+            figs_dict['traces'] = self.plot_factors(cout.mean(dim=0).detach().cpu().numpy())
+            figs_dict['rates'] = self.plot_factors(recon['rates'].mean(dim=1).detach().cpu().numpy())
+
         if self.truth:
             if 'rates' in self.truth.keys():
                 recon_rates = recon['rates'].mean(dim=1).cpu().numpy()
@@ -138,12 +143,15 @@ class Plotter(object):
         
         for ii, (ax,idx) in enumerate(zip(axs,idxs)):
             if norm is True:
-                true_norm= (true[:, idx] - np.mean(true[:, idx]))/np.std(true[:, idx])
-                pred_norm= (pred[:, idx] - np.mean(pred[:, idx]))/np.std(pred[:, idx])
+#                 true_norm= (true[:, idx] - np.mean(true[:, idx]))/np.std(true[:, idx])
+#                 pred_norm= (pred[:, idx] - np.mean(pred[:, idx]))/np.std(pred[:, idx])
                 
+#                 plt.sca(ax)
+#                 plt.plot(self.time, true_norm, lw=2, color=self.colors['linc_red'])
+#                 plt.plot(self.time, pred_norm, lw=2, color=self.colors['linc_blue'])
                 plt.sca(ax)
-                plt.plot(self.time, true_norm, lw=2, color=self.colors['linc_red'])
-                plt.plot(self.time, pred_norm, lw=2, color=self.colors['linc_blue'])
+                plt.plot(self.time, true[:, idx], lw=2, color=self.colors['linc_red'])
+                plt.plot(self.time, pred[:, idx], lw=2, color=self.colors['linc_blue'])
             
             else:
                 plt.sca(ax)
@@ -157,8 +165,7 @@ class Plotter(object):
     
     #------------------------------------------------------------------------------
     def plot_video(self, pred, true, save_folder): #
-        # TODO
-        # pass
+
         num_frames = true.shape[1]
         num_frames_pred = pred.shape[1]
         

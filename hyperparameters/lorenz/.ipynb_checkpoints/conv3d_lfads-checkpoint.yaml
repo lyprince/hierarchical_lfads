@@ -1,5 +1,5 @@
 optimizer:
-  lr_init: 0.01
+  lr_init: 0.001
   betas: !!python/tuple
   - 0.9
   - 0.99
@@ -31,6 +31,7 @@ model:
   channel_dims: !!python/tuple
   - 16
   - 32
+  conv_dense_size: 64
   factor_size: 3
   g_encoder_size: 64
   c_encoder_size: 0
@@ -49,9 +50,10 @@ model:
         learnable: false
 
   clip_val: 5.0
-  conv_dropout: 0.05
+  conv_dropout: 0.5
   lfads_dropout: 0.05
   max_norm: 200
   normalize_factors: true
 
-model_name: conv3d-lfads
+model_name: conv3d_lfads
+

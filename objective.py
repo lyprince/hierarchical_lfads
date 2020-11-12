@@ -118,17 +118,21 @@ class LFADS_Loss(Base_Loss):
 
         return loss, loss_dict
     
-class Conv_LFADS_Loss(LFADS_Loss):
+class Conv_LFADS_Loss(SVLAE_Loss):
     
-    def __init__(self, loglikelihood,
-                 loss_weight_dict= {'kl' : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 0, 'max' : 1.0, 'min' : 0.0},
-                                    'l2' : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 0, 'max' : 1.0, 'min' : 0.0}},
+    def __init__(self, deep_loglikelihood, obs_loglikelihood,
+                 loss_weight_dict= {'kl_obs' : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 0,    'max' : 1.0, 'min' : 0.0},
+                                     'kl_deep': {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 2000, 'max' : 1.0, 'min' : 0.0},
+                                     'l2'     : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 2000, 'max' : 1.0, 'min' : 0.0},
+                                     'recon_deep' : {'weight' : 0.0, 'schedule_dur' : 2000, 'schedule_start' : 2000, 'max' : 1.0, 'min' : 0.0}},
                  l2_con_scale=0.0, l2_gen_scale=0.0):
         
-        super(Conv_LFADS_Loss, self).__init__(loglikelihood=loglikelihood,
-                                              loss_weight_dict=loss_weight_dict,
-                                              l2_con_scale=l2_con_scale,
-                                              l2_gen_scale=l2_gen_scale)
+        super(Conv_LFADS_Loss, self).__init__(loglikelihood_deep = deep_loglikelihood,
+                                                loglikelihood_obs = obs_loglikelihood,
+                                                loss_weight_dict = loss_weight_dict,
+                                                l2_con_scale = l2_con_scale,
+                                                l2_gen_scale = l2_gen_scale)
+
         
         
     def forward(self, x_orig, x_recon, model):
@@ -140,15 +144,23 @@ class Conv_LFADS_Loss(LFADS_Loss):
         kl_loss = model.lfads.kl_div()
         
         l2_loss = 0.5 * l2_weight * self.l2_gen_scale * model.lfads.generator.gru_generator.hidden_weight_l2_norm()
+
     
         if hasattr(model.lfads, 'controller'):            
             l2_loss += 0.5 * l2_weight * self.l2_con_scale * model.lfads.controller.gru_controller.hidden_weight_l2_norm()
             
-        loss = recon_loss +  kl_loss + l2_loss
-        loss_dict = {'recon' : float(recon_loss.data),
-                     'kl'    : float(kl_loss.data),
-                     'l2'    : float(l2_loss.data),
-                     'total' : float(loss.data)}
+        # loss = recon_loss +  kl_loss + l2_loss
+        # loss_dict = {'recon' : float(recon_loss.data),
+        #              'kl'    : float(kl_loss.data),
+        #              'l2'    : float(l2_loss.data),
+        #              'total' : float(loss.data)}
+        loss = recon_obs_loss + recon_deep_loss +  kl_obs_loss + kl_deep_loss + l2_loss
+        loss_dict = {'recon_obs'  : float(recon_obs_loss.data),
+                     'recon_deep' : float(recon_deep_loss.data),
+                     'kl_obs'     : float(kl_obs_loss.data),
+                     'kl_deep'    : float(kl_deep_loss.data),
+                     'l2'         : float(l2_loss.data),
+                     'total'      : float(loss.data)}
 
         return loss, loss_dict
         

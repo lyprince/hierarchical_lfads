@@ -111,7 +111,7 @@ class SVLAE_Net(nn.Module):
         obs_encoder_state, obs_controller_state = self.obs_model.initialize_hidden_states(input)
         
         out_obs_enc = self.obs_model.encoder(input, obs_encoder_state)
-
+#         pdb.set_trace()
         input_deep =  input
         deep_g_encoder_state, deep_c_encoder_state, deep_controller_state = self.deep_model.initialize_hidden_states(input_deep)
         
@@ -160,22 +160,21 @@ class SVLAE_Net(nn.Module):
                 deep_gen_inputs = None
             
             obs_u_mean, obs_u_logvar, obs_controller_state = self.obs_model.controller(torch.cat((out_obs_enc[t], obs_state), dim=1), obs_controller_state)
-#             pdb.set_trace()
             self.obs_model.u_posterior_mean   = torch.cat((self.obs_model.u_posterior_mean, obs_u_mean.unsqueeze(1)), dim=1)
             self.obs_model.u_posterior_logvar = torch.cat((self.obs_model.u_posterior_logvar, obs_u_logvar.unsqueeze(1)), dim=1)
-            
+
             obs_generator_state = self.obs_model.sample_gaussian(obs_u_mean, obs_u_logvar)
             
             deep_generator_state, factor_state = self.deep_model.generator(deep_generator_input, deep_generator_state)
-            
+
             factors = torch.cat((factors, factor_state.unsqueeze(0)), dim=0)
             
-            obs_state, spike_state = self.obs_model.generator(torch.cat((obs_generator_state, factor_state), dim=1), obs_state)
+            obs_state, spike_state = self.obs_model.generator(torch.cat((obs_generator_state, factor_state), dim=1), obs_state)            
             
 #             pdb.set_trace()
             obs = torch.cat((obs, obs_state.unsqueeze(0)), dim=0)
             spikes = torch.cat((spikes, spike_state.unsqueeze(0)), dim=0)
-            
+        
         if self.deep_c_encoder_size > 0 and self.deep_controller_size > 0 and self.deep_u_latent_size > 0:
             # Instantiate AR1 process as mean and variance per time step
             self.deep_model.u_prior_mean, self.deep_model.u_prior_logvar = self.deep_model._gp_to_normal(self.deep_model.u_prior_gp_mean, self.deep_model.u_prior_gp_logvar, self.deep_model.u_prior_gp_logtau, deep_gen_inputs)
@@ -184,7 +183,6 @@ class SVLAE_Net(nn.Module):
         recon['rates'] = self.deep_model.fc_logrates(factors).exp()
         recon['data']  = obs.permute(1, 0, 2)
         recon['spikes'] = spikes
-        
         return recon, (factors, deep_gen_inputs)
     
 
@@ -366,7 +364,6 @@ class Calcium_Net(nn.Module):
         
         self.steps_size, self.batch_size, input_size = input.shape
         assert input_size == self.input_size, 'Input is expected to have dimensions [%i, %i, %i]'%(self.steps_size, self.batch_size, self.input_size)
-        
         encoder_state  = (torch.ones(self.batch_size, 2,  self.encoder_size, device=self.device) * self.encoder_init).permute(1, 0, 2)
         controller_state = torch.ones(self.batch_size, self.controller_size, device=self.device) * self.controller_init
         return encoder_state, controller_state
@@ -401,6 +398,7 @@ class Calcium_Encoder(nn.Module):
         self.gru  = nn.GRU(input_size=self.input_size, hidden_size=self.encoder_size, bidirectional=True)
             
     def forward(self, input, hidden):
+        self.gru.flatten_parameters()
         encoder_init = hidden
         
         # Run bidirectional RNN over data
@@ -456,5 +454,4 @@ class AR1_Calcium(nn.Module):
         self.logvar = nn.Parameter(torch.tensor(log(parameters['var']['value']), device=device, dtype=torch.float32)) if parameters['var']['learnable'] else torch.tensor(log(parameters['var']['value']), device=device, dtype=torch.float32)
 
     def forward(self, input, hidden):
-#         pdb.set_trace()
         return hidden * (1.0-1.0/self.logtau.exp()) + self.gain * input + self.bias

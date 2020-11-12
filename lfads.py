@@ -321,6 +321,7 @@ class LFADS_SingleSession_Net(LFADS_Net):
             recon = {'rates' : self.fc_logrates(factors).exp()}
         elif self.output_nonlin == 'softplus':
             recon = {'rates' : self.nonlin(self.fc_logrates(factors))}
+
         recon['data'] = recon['rates'].clone().permute(1, 0, 2)
         return recon, (factors, gen_inputs)
     

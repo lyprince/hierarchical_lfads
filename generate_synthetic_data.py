@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from synthetic_data import SyntheticCalciumDataGenerator
+from synthetic_data import SyntheticCalciumDataGenerator, ShenoyCalciumDataGenerator
 from utils import write_data
 import argparse
 import yaml
@@ -20,13 +20,14 @@ parser.add_argument('--trainp', default=0.8, type=float)
 parser.add_argument('--dt_spike', default=0.01, type=float)
 parser.add_argument('--dt_sys', default=0.01, type=float)
 parser.add_argument('--burn_steps', default=0, type=int)
+parser.add_argument('--shenoy_dir', default='./', type=str)
 
 def main():
     args = parser.parse_args()
     
     if os.path.exists('%s/%s_%03d'%(args.output, args.system, args.seed)):
         pass
-    
+      
     else:
         if args.parameters:
             params_dict = yaml.load(open(args.parameters), Loader=yaml.FullLoader)
