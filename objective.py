@@ -207,7 +207,20 @@ class LogLikelihoodGaussian(nn.Module):
             return loglikelihood_gaussian(x, mean, logvar)
         else:
             return -torch.nn.functional.mse_loss(x, mean, reduction='sum')/x.shape[0]
-    
+        
+class LogLikelihoodExpShotNoise(nn.Module):
+    def __init__(self, kernel_size=20):
+        super(LogLikelihoodExpShotNoise, self).__init__()
+        self.conv_moments = CausalChannelConv1d(kernel_size=20, out_channels=2, bias=True, infer_padding=False)
+        self.conv_moments.weight.data.uniform_(1e-6, kernel_size**-0.5)
+
+        
+    def forward(self, x, rates):
+        self.conv_moments.weight.data[:2] = self.conv_moments.weight.data[:2].clamp(min=1e-6)
+#         pdb.set_trace()
+        mean, logvar = self.conv_moments(rates.permute(1,0,2)).permute(1, 2, 0, 3)
+        return loglikelihood_gaussian(x, mean, logvar)
+        
 def loglikelihood_gaussian(x, mean, logvar):
     from math import pi
     return -0.5*(log(2*pi) + logvar + ((x - mean).pow(2)/torch.exp(logvar))).mean(dim=0).sum()
@@ -228,3 +241,48 @@ def kldiv_gaussian_gaussian(post_mu, post_lv, prior_mu, prior_lv):
     klc = 0.5 * (prior_lv - post_lv + torch.exp(post_lv - prior_lv) \
          + ((post_mu - prior_mu)/torch.exp(0.5 * prior_lv)).pow(2) - 1.0).mean(dim=0).sum()
     return klc
+
+
+class CausalChannelConv1d(torch.nn.Conv2d):
+    def __init__(self,
+                 kernel_size, out_channels=1, bias=True, infer_padding=False):
+        
+        # Setup padding
+        if infer_padding:
+            self.__padding = 0
+        else:
+            self.__padding = (kernel_size - 1)
+        
+        '''
+        CausalChannelConv1d class. Implements channel-specific 1-D causal convolution. Applies same
+        convolution kernel to every channel independently. Padding only at start of time dimension.
+        Output dimensions are same as input dimensions.
+        
+        __init__(self, kernel_size, bias=True)
+        
+        required arguments:
+            - kernel_size (int) : size of convolution kernel
+            - out_channels (int) : number of output channels
+            
+        optional arguments:
+            - bias (bool) : include bias (default=True)
+        '''
+        super(CausalChannelConv1d, self).__init__(
+              in_channels=1,
+              out_channels=out_channels,
+              kernel_size = (kernel_size, 1),
+              stride=1,
+              padding=(self.__padding, 0),
+              dilation=1,
+              groups=1,
+              bias=bias)
+        
+    def forward(self, input):
+        # Include false channel dimension
+        result = super(CausalChannelConv1d, self).forward(input.unsqueeze(1))
+        if self.__padding != 0:
+            # Slice tensor to include padding only at start and remove false channel dimension
+            return result[:, :, :-self.__padding].squeeze(1)
+        else:
+            # Remove false channel dimension
+            return result.squeeze(1)

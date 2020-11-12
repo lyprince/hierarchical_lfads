@@ -40,7 +40,7 @@ objective:
   l2_gen_scale: 2000
   
 model:
-  factor_size: 16
+  factor_size: 32
   obs_encoder_size: 128
   obs_latent_size: 128
   obs_controller_size: 128
@@ -90,8 +90,8 @@ model:
           value: 0.1
           learnable: true
         tau:
-          value: 10
-          learnable: true
+          value: 1
+          learnable: false
 
   clip_val: 5.0
   generator_burn: 10

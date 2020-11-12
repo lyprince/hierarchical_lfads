@@ -28,7 +28,7 @@ objective:
   l2_gen_scale: 2000
 
 model:
-  factor_size: 16
+  factor_size: 32
   g_encoder_size: 128
   c_encoder_size: 128
   g_latent_size: 64

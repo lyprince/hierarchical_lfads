@@ -106,6 +106,7 @@ def main():
 #-------------------------------------------------------------------
 #-------------------------------------------------------------------
 def prep_model(model_name, data_dict, data_suffix, batch_size, device, hyperparams):
+    print(model_name)
     if model_name == 'lfads':
         train_dl, valid_dl, input_dims, plotter = prep_data(data_dict=data_dict, data_suffix=data_suffix, batch_size=batch_size, device=device)
         model, objective = prep_lfads(input_dims = input_dims,
@@ -115,7 +116,23 @@ def prep_model(model_name, data_dict, data_suffix, batch_size, device, hyperpara
                                       dt= data_dict['dt']
                                       )
         
-    elif model_name == 'svlae':
+    elif model_name == 'lfads-gaussian' or model_name=='lfads-gaussian-softplus':
+        train_dl, valid_dl, input_dims, plotter = prep_data(data_dict=data_dict, data_suffix=data_suffix, batch_size=batch_size, device=device)
+        model, objective = prep_lfads_gaussian(input_dims = input_dims,
+                                               hyperparams = hyperparams,
+                                               device= device,
+                                               dtype=train_dl.dataset.tensors[0].dtype
+                                              )
+        
+    elif model_name == 'lfads-expshotnoise':
+        train_dl, valid_dl, input_dims, plotter   = prep_data(data_dict=data_dict, data_suffix=data_suffix, batch_size=batch_size, device=device)
+        model, objective = prep_lfads_expshotnoise(input_dims  = input_dims,
+                                                   hyperparams = hyperparams,
+                                                   device= device,
+                                                   dtype=train_dl.dataset.tensors[0].dtype
+                                                   )
+        
+    elif model_name == 'svlae' or model_name == 'svlae-nopoisson':
         train_dl, valid_dl, input_dims, plotter = prep_data(data_dict=data_dict, data_suffix=data_suffix, batch_size=batch_size, device=device)
         
         if 'obs_gain_init' in data_dict.keys():
@@ -182,6 +199,74 @@ def prep_lfads(input_dims, hyperparams, device, dtype, dt):
 
     return model, objective
     
+#-------------------------------------------------------------------
+#-------------------------------------------------------------------
+
+def prep_lfads_gaussian(input_dims, hyperparams, device, dtype):
+    from objective import LFADS_Loss, LogLikelihoodGaussian
+    from lfads import LFADS_SingleSession_Net
+    
+    print(hyperparams['model']['nonlin'])
+    model = LFADS_SingleSession_Net(input_size           = input_dims,
+                                    factor_size          = hyperparams['model']['factor_size'],
+                                    g_encoder_size       = hyperparams['model']['g_encoder_size'],
+                                    c_encoder_size       = hyperparams['model']['c_encoder_size'],
+                                    g_latent_size        = hyperparams['model']['g_latent_size'],
+                                    u_latent_size        = hyperparams['model']['u_latent_size'],
+                                    controller_size      = hyperparams['model']['controller_size'],
+                                    generator_size       = hyperparams['model']['generator_size'],
+                                    prior                = hyperparams['model']['prior'],
+                                    clip_val             = hyperparams['model']['clip_val'],
+                                    dropout              = hyperparams['model']['dropout'],
+                                    do_normalize_factors = hyperparams['model']['normalize_factors'],
+                                    max_norm             = hyperparams['model']['max_norm'],
+                                    output_nonlin        = hyperparams['model']['nonlin'],
+                                    device               = device).to(device)
+    
+    print(model.output_nonlin)
+    
+    loglikelihood = LogLikelihoodGaussian()
+    
+    objective = LFADS_Loss(loglikelihood            = loglikelihood,
+                           loss_weight_dict         = {'kl': hyperparams['objective']['kl'], 
+                                                       'l2': hyperparams['objective']['l2']},
+                           l2_con_scale             = hyperparams['objective']['l2_con_scale'],
+                           l2_gen_scale             = hyperparams['objective']['l2_gen_scale']).to(device)
+    
+    return model, objective
+
+#-------------------------------------------------------------------
+#-------------------------------------------------------------------
+
+def prep_lfads_expshotnoise(input_dims, hyperparams, device, dtype):
+    from objective import LFADS_Loss, LogLikelihoodExpShotNoise
+    from lfads import LFADS_SingleSession_Net
+    
+    model = LFADS_SingleSession_Net(input_size           = input_dims,
+                                    factor_size          = hyperparams['model']['factor_size'],
+                                    g_encoder_size       = hyperparams['model']['g_encoder_size'],
+                                    c_encoder_size       = hyperparams['model']['c_encoder_size'],
+                                    g_latent_size        = hyperparams['model']['g_latent_size'],
+                                    u_latent_size        = hyperparams['model']['u_latent_size'],
+                                    controller_size      = hyperparams['model']['controller_size'],
+                                    generator_size       = hyperparams['model']['generator_size'],
+                                    prior                = hyperparams['model']['prior'],
+                                    clip_val             = hyperparams['model']['clip_val'],
+                                    dropout              = hyperparams['model']['dropout'],
+                                    do_normalize_factors = hyperparams['model']['normalize_factors'],
+                                    max_norm             = hyperparams['model']['max_norm'],
+                                    device               = device).to(device)
+    
+    loglikelihood = LogLikelihoodExpShotNoise(kernel_size=hyperparams['model']['kernel_size'])
+    
+    objective = LFADS_Loss(loglikelihood            = loglikelihood,
+                           loss_weight_dict         = {'kl': hyperparams['objective']['kl'], 
+                                                       'l2': hyperparams['objective']['l2']},
+                           l2_con_scale             = hyperparams['objective']['l2_con_scale'],
+                           l2_gen_scale             = hyperparams['objective']['l2_gen_scale']).to(device)
+    
+    return model, objective
+
 #-------------------------------------------------------------------
 #-------------------------------------------------------------------
     

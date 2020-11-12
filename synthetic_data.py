@@ -152,6 +152,57 @@ class AR1Calcium(DynamicalSystem):
     
     def rescale(self, xt):
         return xt
+    
+class MLSpike(DynamicalSystem):
+    def __init__(self, dims, tau=0.1, dt=0.01, n=2, c0=0.0, gamma=1.0, A=1.0):
+        self.dims = dims
+        self.state = np.ones(dims+(2,))*np.array([c0, 0.0])
+        self.tau = tau
+        self.dt = dt
+        self.n = n
+        self.c0 = c0
+        self.gamma=gamma
+        self.A = A
+        
+    def gradient(self, state):
+        c,p = self.state.T
+        dc = -c/self.tau
+        b = (self.c0 + c)**self.n - self.c0**self.n
+        dp = (1 + self.gamma*b) * (b/(1+self.gamma*b) - p)
+        return np.array([dc, dp]).T
+    
+    def rescale(self, state):
+        return (self.A * state[..., 1])
+    
+    def integrate(self, num_steps, inputs, burn_steps = 0):
+        
+        result = np.zeros((num_steps,) + self.state.shape)
+        for t in range(burn_steps):
+            self.state = self.update()
+        for t in range(num_steps):
+            self.state = self.update()
+            if inputs is not None:
+                self.state[...,0] += inputs[t]
+            result[t] = self.state
+            
+        result = self.rescale(result)
+        self.result = result
+        return result
+    
+class MLSpikeCalciumDataGenerator():
+    def __init__(self, train_calcium, valid_calcium, sigma=0.2, n=2, A=2, gamma=0.0001):
+        
+        self.train_calcium = train_calcium
+        self.valid_calcium = valid_calcium
+        self.sigma = sigma
+        self.n = n
+        self.A = A
+        self.gamma=gamma
+        
+    def generate_dataset(self):
+        train_fluor_mlspike = self.A * self.train_calcium**self.n/(1 + self.gamma*self.train_calcium**self.n) + np.random.randn(*self.train_calcium.shape)*self.sigma
+        valid_fluor_mlspike = self.A * self.valid_calcium**self.n/(1 + self.gamma*self.valid_calcium**self.n) + np.random.randn(*self.valid_calcium.shape)*self.sigma
+        return train_fluor_mlspike, valid_fluor_mlspike
 
 class SyntheticCalciumDataGenerator():
     def __init__(self, system, seed, trainp = 0.8,
@@ -169,10 +220,20 @@ class SyntheticCalciumDataGenerator():
         self.num_steps  = num_steps
         self.num_trials = num_trials
         
-        self.calcium_dynamics = AR1Calcium(dims=(self.num_trials,
+        self.ar1_calcium_dynamics = AR1Calcium(dims=(self.num_trials,
                                                  self.system.num_inits,
                                                  self.system.net_size), 
                                                  tau=tau_cal, dt=dt_cal)
+        
+        self.mlspike_calcium_dynamics = MLSpike(dims=(self.num_trials,
+                                                     self.system.num_inits,
+                                                     self.system.net_size),
+                                                     tau=0.3,
+                                                     c0=0.0,
+                                                     n=2.0,
+                                                     A=2.0,
+                                                     gamma=0.01,
+                                                     dt=dt_cal)
         self.sigma = sigma
         
         self.frame_height = frame_height
@@ -192,10 +253,12 @@ class SyntheticCalciumDataGenerator():
             
         rates   = self.trials_repeat(rates)
 #         pdb.set_trace()
-        spikes  = self.spikify(rates, self.calcium_dynamics.dt)
+        spikes  = self.spikify(rates, self.ar1_calcium_dynamics.dt)
 #         pdb.set_trace()
-        calcium = self.calcium_dynamics.integrate(num_steps=self.num_steps, inputs=spikes.transpose(2, 0, 1, 3)).transpose(1, 2, 0, 3)
-        fluor   = calcium + np.random.randn(*calcium.shape)*self.sigma
+        calcium = self.ar1_calcium_dynamics.integrate(num_steps=self.num_steps, inputs=spikes.transpose(2, 0, 1, 3)).transpose(1, 2, 0, 3)
+        fluor_ar1   = calcium + np.random.randn(*calcium.shape)*self.sigma
+        
+        fluor_mlspike = self.mlspike_calcium_dynamics.integrate(num_steps=self.num_steps, inputs=spikes.transpose(2, 0, 1, 3)).transpose(1, 2, 0, 3) + np.random.randn(*calcium.shape)*self.sigma
         
 #         pdb.set_trace()
         cells, cell_loc = self.generate_cells(num_cells=self.system.net_size,
@@ -204,14 +267,14 @@ class SyntheticCalciumDataGenerator():
                                               cell_radius=self.cell_radius)
         
         data_dict = {}
-        for data, data_name in zip((inputs, rates, latent, spikes, calcium, fluor), 
-                                   ('inputs', 'rates', 'latent', 'spikes', 'calcium', 'fluor')):
+        for data, data_name in zip((inputs, rates, latent, spikes, calcium, fluor_ar1, fluor_mlspike), 
+                                   ('inputs', 'rates', 'latent', 'spikes', 'calcium', 'fluor_ar1', 'fluor_mlspike')):
             if data is not None:
                 data_dict['train_%s'%data_name], data_dict['valid_%s'%data_name] = self.train_test_split(data)
         
         data_dict['cells'] = cells
         data_dict['cell_loc'] = cell_loc
-        data_dict['dt'] = self.calcium_dynamics.dt
+        data_dict['dt'] = self.ar1_calcium_dynamics.dt
         
         return data_dict
         

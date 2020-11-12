@@ -300,7 +300,7 @@ class LFADS_SingleSession_Net(LFADS_Net):
                                   'var'  : {'value': 0.1, 'learnable' : True},
                                   'tau'  : {'value': 10,  'learnable' : True}}},
                  clip_val=5.0, dropout=0.0, max_norm = 200, deep_freeze = False,
-                 do_normalize_factors=True, factor_bias = False, device='cpu'):
+                 do_normalize_factors=True, factor_bias = False, device='cpu', output_nonlin='exp'):
         
         super(LFADS_SingleSession_Net, self).__init__(input_size = input_size, factor_size = factor_size, prior = prior,
                                                       g_encoder_size   = g_encoder_size, c_encoder_size = c_encoder_size,
@@ -310,12 +310,17 @@ class LFADS_SingleSession_Net(LFADS_Net):
                                                       do_normalize_factors=do_normalize_factors, factor_bias = factor_bias, device=device)
         
         self.fc_logrates = nn.Linear(in_features= self.factor_size, out_features= self.input_size)
-        
+        print(output_nonlin)
+        self.output_nonlin = output_nonlin
+        self.nonlin = nn.Softplus()
         self.initialize_weights()
         
     def forward(self, input):
         factors, gen_inputs = super(LFADS_SingleSession_Net, self).forward(input.permute(1, 0, 2))
-        recon = {'rates' : self.fc_logrates(factors).exp()}
+        if self.output_nonlin == 'exp':
+            recon = {'rates' : self.fc_logrates(factors).exp()}
+        elif self.output_nonlin == 'softplus':
+            recon = {'rates' : self.nonlin(self.fc_logrates(factors))}
         recon['data'] = recon['rates'].clone().permute(1, 0, 2)
         return recon, (factors, gen_inputs)
     

@@ -56,12 +56,14 @@ def main():
         S, C, bias, G, gain, rval = deconvolve_calcium_unknown(data,
                                                                g=g,
                                                                snr_thresh=args.scale)
+        
+#         pdb.set_trace()
         tau = -dt/(np.log(G))
         
     if args.flatten:
-        data = data.reshape(data_size, steps_size, state_size)
-        S = S.reshape(data_size, steps_size, state_size)
-        C = C.reshape(data_size, steps_size, state_size)
+        data = data.reshape(state_size, data_size, steps_size).transpose(1, 2, 0)
+        S = S.reshape(state_size, data_size, steps_size).transpose(1, 2, 0)
+        C = C.reshape(state_size, data_size, steps_size).transpose(1, 2, 0)
         
     else:
         data = data.reshape(data_size, state_size, steps_size+1).transpose(0, 2, 1)[:, 1:]
@@ -69,9 +71,9 @@ def main():
         C = C.reshape(data_size, state_size, steps_size+1).transpose(0, 2, 1)[:, 1:]
         
         if not args.known:
-            bias = bias.reshape(data_size, state_size).mean(axis=0)
-            tau  = tau.reshape(data_size, state_size).mean(axis=0)
-            gain = gain.reshape(data_size, state_size).mean(axis=0)
+            bias = np.median(bias.reshape(data_size, state_size), axis=0)
+            tau  = np.median(tau.reshape(data_size, state_size), axis=0)
+            gain = np.median(gain.reshape(data_size, state_size), axis=0)
         
     if args.undo_train_test_split:
         train_fluor = data[train_idx]
@@ -139,9 +141,9 @@ def deconvolve_calcium_unknown(X, g=0.9, snr_thresh=3):
     b_init = compute_mode(X)
     
     for ix, x in enumerate(X):
-        c, s, b, g, lam = oasis.functions.deconvolve(x, b=b_init, g=[g], penalty=1, max_iter=5)
+        c, s, b, g, lam = oasis.functions.deconvolve(x, b=0, penalty=1, max_iter=5, optimize_g=1)
         sn = (x-c).std(ddof=1)
-        c, s, b, g, lam = oasis.functions.deconvolve(x, b=b, penalty=1, g=[g], sn=sn, max_iter=5)
+        c, s, b, g, lam = oasis.functions.deconvolve(x, b=b, penalty=1, sn=sn, max_iter=5, g=[g])
         sn = (x-c).std(ddof=1)
         c, s = oasis.oasis_methods.oasisAR1(x-b, g=g, lam=lam, s_min=sn*snr_thresh)
         r = np.corrcoef(c, x)[0, 1]

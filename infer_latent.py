@@ -57,7 +57,7 @@ def main():
     latent_dict['valid']['latent'] = []
     latent_dict['train']['recon'] = []
     latent_dict['valid']['recon'] = []
-    if model_name == 'svlae':
+    if model_name == 'svlae' or model_name =='svlae-nopoisson':
         latent_dict['train']['spikes'] = []
         latent_dict['valid']['spikes'] = []
 
@@ -66,7 +66,7 @@ def main():
         for dl, key in ((train_dl, 'train'), (valid_dl, 'valid')):
             latent_dict[key]['latent'] = []
             latent_dict[key]['rates'] = []
-            if model_name == 'svlae':
+            if model_name == 'svlae' or model_name =='svlae-nopoisson':
                 latent_dict[key]['spikes'] = []
                 latent_dict[key]['fluor'] = []
             for x in dl.dataset:
@@ -74,7 +74,7 @@ def main():
                 result = infer_and_recon(x, batch_size=args.num_average, model=model)
                 latent_dict[key]['latent'].append(result['latent'])
                 latent_dict[key]['rates'].append(result['rates'])
-                if model_name == 'svlae':
+                if model_name == 'svlae' or model_name == 'svlae-nopoisson':
                     latent_dict[key]['spikes'].append(result['spikes'])
                     latent_dict[key]['fluor'].append(result['fluor'])
                     
@@ -138,7 +138,7 @@ def main():
         if u_size > 0:
             inputs  = np.zeros((data_size, steps_size, state_size))
 
-        if model_name == 'svlae' or args.data_suffix == 'ospikes':
+        if model_name == 'svlae' or model_name=='svlae-nopoisson' or args.data_suffix == 'ospikes':
             spikes  = np.zeros((data_size, steps_size, state_size))
             fluor   = np.zeros((data_size, steps_size, state_size))
         
@@ -160,7 +160,7 @@ def main():
             inputs[valid_idx] = latent_dict['valid']['inputs']
             latent_dict['ordered']['inputs'] = inputs
 
-        if model_name == 'svlae' or args.data_suffix == 'ospikes':
+        if model_name == 'svlae' or model_name =='svlae-nopoisson' or args.data_suffix == 'ospikes':
             spikes[train_idx] = latent_dict['train']['spikes']
             spikes[valid_idx] = latent_dict['valid']['spikes']
             latent_dict['ordered']['spikes'] = spikes
